@@ -1,0 +1,9 @@
+[project]
+name = "ingest-console"
+version = "0.1.0"
+description = "SiS container-runtime dependencies for the Ingestion Ops Console"
+requires-python = ">=3.11"
+dependencies = [
+    "snowflake-snowpark-python",
+    "streamlit",
+]

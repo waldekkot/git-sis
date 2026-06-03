@@ -1,0 +1,23 @@
+[project]
+name = "git-sis"
+version = "0.1.0"
+description = "Git-connected Streamlit-in-Snowflake ingestion ops console (Streamlit + Snowpark)"
+requires-python = ">=3.11"
+dependencies = [
+    "streamlit>=1.40",
+    "snowflake-snowpark-python>=1.20",
+    "snowflake-connector-python>=3.12",
+    "pandas>=2.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

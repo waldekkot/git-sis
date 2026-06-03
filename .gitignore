@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.ruff_cache/
+.pytest_cache/
+
+# Streamlit local secrets (NEVER commit)
+.streamlit/secrets.toml
+app/.streamlit/secrets.toml
+
+# Snowflake / credentials
+token/
+*.p8
+*-token-secret.txt
+
+# OS
+.DS_Store
+
+# CoCo / IDE artifacts
+.snowflake/

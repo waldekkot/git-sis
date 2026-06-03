@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>git-sis Tutorial — Deploy to SiS</title>
+  <title>git-sis Tutorial — Deploy to SiS (Workspaces)</title>
   <link rel="stylesheet" href="assets/style.css">
   <style>
     /* ── Deploy loop animation ───────────────────────────────────── */
@@ -67,30 +67,30 @@
     <svg class="svg-anim" viewBox="0 0 580 160" fill="none" xmlns="http://www.w3.org/2000/svg"
          style="width:100%;max-width:580px" role="img" aria-label="Deploy loop: FETCH, CREATE STREAMLIT, ADD LIVE VERSION, Active">
 
-      <!-- Step 1: FETCH -->
+      <!-- Step 1: app/ files -->
       <rect class="step-1" x="10" y="45" width="110" height="65" rx="8" stroke="#29B5E8" stroke-width="1.5"/>
-      <text x="65" y="72" text-anchor="middle" fill="#29B5E8" font-size="10" font-family="monospace" font-weight="700">ALTER GIT</text>
-      <text x="65" y="85" text-anchor="middle" fill="#29B5E8" font-size="10" font-family="monospace" font-weight="700">REPOSITORY</text>
-      <text x="65" y="98" text-anchor="middle" fill="#8B949E" font-size="9">FETCH</text>
+      <text x="65" y="72" text-anchor="middle" fill="#29B5E8" font-size="10" font-family="monospace" font-weight="700">Local app/</text>
+      <text x="65" y="85" text-anchor="middle" fill="#29B5E8" font-size="10" font-family="monospace" font-weight="700">+ snowflake.yml</text>
+      <text x="65" y="98" text-anchor="middle" fill="#8B949E" font-size="9">30_deploy.sh</text>
 
       <!-- Connector 1 -->
       <path class="conn-1" d="M120 77 L150 77" stroke="#29B5E8" stroke-width="1.5" marker-end="url(#adep)"/>
 
-      <!-- Step 2: CREATE STREAMLIT -->
+      <!-- Step 2: snow streamlit deploy -->
       <rect class="step-2" x="150" y="40" width="130" height="75" rx="8" stroke="#29B5E8" stroke-width="1.5"/>
-      <text x="215" y="65" text-anchor="middle" fill="#29B5E8" font-size="10" font-family="monospace" font-weight="700">CREATE OR REPLACE</text>
-      <text x="215" y="78" text-anchor="middle" fill="#29B5E8" font-size="10" font-family="monospace" font-weight="700">STREAMLIT</text>
-      <text x="215" y="91" text-anchor="middle" fill="#8B949E" font-size="9">FROM @REPO/branches/main/app/</text>
-      <text x="215" y="104" text-anchor="middle" fill="#8B949E" font-size="8">container runtime</text>
+      <text x="215" y="60" text-anchor="middle" fill="#29B5E8" font-size="10" font-family="monospace" font-weight="700">snow streamlit</text>
+      <text x="215" y="73" text-anchor="middle" fill="#29B5E8" font-size="10" font-family="monospace" font-weight="700">deploy</text>
+      <text x="215" y="86" text-anchor="middle" fill="#8B949E" font-size="9">uploads to stage</text>
+      <text x="215" y="99" text-anchor="middle" fill="#8B949E" font-size="8">GIT_SIS.STREAMLIT</text>
 
       <!-- Connector 2 -->
       <path class="conn-2" d="M280 77 L310 77" stroke="#29B5E8" stroke-width="1.5" marker-end="url(#adep)"/>
 
-      <!-- Step 3: ADD LIVE VERSION -->
+      <!-- Step 3: STREAMLIT object -->
       <rect class="step-3" x="310" y="45" width="130" height="65" rx="8" stroke="#29B5E8" stroke-width="1.5"/>
-      <text x="375" y="70" text-anchor="middle" fill="#29B5E8" font-size="10" font-family="monospace" font-weight="700">ALTER STREAMLIT</text>
-      <text x="375" y="83" text-anchor="middle" fill="#29B5E8" font-size="9" font-family="monospace">ADD LIVE VERSION</text>
-      <text x="375" y="96" text-anchor="middle" fill="#8B949E" font-size="9">FROM LAST</text>
+      <text x="375" y="70" text-anchor="middle" fill="#29B5E8" font-size="10" font-family="monospace" font-weight="700">STREAMLIT object</text>
+      <text x="375" y="83" text-anchor="middle" fill="#29B5E8" font-size="9" font-family="monospace">container runtime</text>
+      <text x="375" y="96" text-anchor="middle" fill="#8B949E" font-size="9">auto live version</text>
 
       <!-- Connector 3 -->
       <path class="conn-3" d="M440 77 L470 77" stroke="#3FB950" stroke-width="1.5" marker-end="url(#adep3)"/>
@@ -121,73 +121,89 @@
     </svg>
   </div>
 
-  <h2 class="reveal">First-time bootstrap</h2>
+  <h2 class="reveal">Deploy: workspace-native approach</h2>
 
   <div class="reveal">
+    <h3>Option A — CLI (scripts/30_deploy.sh)</h3>
     <p>
-      Run <code>--bootstrap</code> once — it creates the API integration and GIT REPOSITORY,
-      then runs the deploy loop.
+      <code>snow streamlit deploy</code> reads <code>app/snowflake.yml</code> for the compute pool,
+      runtime, and EAI settings, then uploads your local <code>app/</code> files to a Snowflake stage
+      and creates/replaces the STREAMLIT object.
     </p>
     <div class="code-block">
-      <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
-      <pre>scripts/deploy.sh --bootstrap -c oregon-sedemo</pre>
+      <div class="code-block-header"><span>bash — after scripts/10_setup.sh</span><button class="copy-btn">Copy</button></div>
+      <pre>scripts/30_deploy.sh -c oregon-sedemo
+# Equivalent to:
+snow streamlit deploy -c oregon-sedemo -p app/ --replace</pre>
     </div>
 
-    <p>The bootstrap script runs:</p>
+    <h3>Option B — Snowsight Workspace</h3>
     <ol class="steps">
-      <li><code>USE ROLE ACCOUNTADMIN</code> → create <code>git_api_waldekkot</code> API integration</li>
-      <li>Grant USAGE to SYSADMIN, create <code>APP_REPO</code> GIT REPOSITORY</li>
-      <li>Run the deploy loop (FETCH + CREATE STREAMLIT + ADD LIVE VERSION)</li>
+      <li>Open <strong>Snowsight → Workspaces → New workspace</strong></li>
+      <li>Browse to <code>app/streamlit_app.py</code> and press <strong>Run</strong> for a private dev preview</li>
+      <li>Press <strong>Deploy</strong> — Snowsight reads <code>app/snowflake.yml</code> for settings</li>
     </ol>
 
     <div class="note">
       <span class="note-icon">💡</span>
       <div>
-        <strong>Container runtime requirements:</strong> <code>app/pyproject.toml</code> must exist in the app
-        source directory (not repo root), and <code>EXTERNAL_ACCESS_INTEGRATIONS = (PYPI_ACCESS_INTEGRATION)</code>
-        must be set in the CREATE STREAMLIT statement. Without either, the container startup fails.
+        Both options deploy the same STREAMLIT object in the same database/schema.
+        CI/CD uses Option A (<code>30_deploy.sh</code>). Interactive development can use
+        either — the workspace provides a live preview before publishing.
       </div>
     </div>
   </div>
 
-  <h2 class="reveal">The deploy SQL</h2>
+  <h2 class="reveal">app/snowflake.yml</h2>
 
   <div class="reveal">
+    <p>
+      The <code>snowflake.yml</code> in the <code>app/</code> directory declares all deployment
+      settings. Both the workspace Deploy button and <code>snow streamlit deploy</code> read it.
+    </p>
     <div class="code-block">
-      <div class="code-block-header"><span>SQL — deploy/10_git_and_streamlit.sql (section 3)</span><button class="copy-btn">Copy</button></div>
-      <pre>-- Pull latest commit from GitHub
-ALTER GIT REPOSITORY SNOWFLAKE_LEARNING_DB.GIT_SIS.APP_REPO FETCH;
-
--- Snapshot app/ dir from the cloned branch
-CREATE OR REPLACE STREAMLIT SNOWFLAKE_LEARNING_DB.GIT_SIS.INGEST_CONSOLE
-    FROM '@SNOWFLAKE_LEARNING_DB.GIT_SIS.APP_REPO/branches/main/app/'
-    MAIN_FILE         = 'streamlit_app.py'
-    QUERY_WAREHOUSE   = COMPUTE_WH
-    RUNTIME_NAME      = 'SYSTEM$ST_CONTAINER_RUNTIME_PY3_11'
-    COMPUTE_POOL      = SYSTEM_COMPUTE_POOL_CPU
-    EXTERNAL_ACCESS_INTEGRATIONS = (PYPI_ACCESS_INTEGRATION)
-    TITLE             = 'Ingestion Ops Console';
-
--- Activate the app
-ALTER STREAMLIT SNOWFLAKE_LEARNING_DB.GIT_SIS.INGEST_CONSOLE
-    ADD LIVE VERSION FROM LAST;</pre>
+      <div class="code-block-header"><span>app/snowflake.yml</span><button class="copy-btn">Copy</button></div>
+      <pre>definition_version: 2
+entities:
+  ingest_console:
+    type: streamlit
+    identifier:
+      name: INGEST_CONSOLE
+      schema: GIT_SIS
+      database: SNOWFLAKE_LEARNING_DB
+    title: "Ingestion Ops Console"
+    query_warehouse: COMPUTE_WH
+    compute_pool: SYSTEM_COMPUTE_POOL_CPU
+    runtime_name: SYSTEM$ST_CONTAINER_RUNTIME_PY3_11
+    main_file: streamlit_app.py
+    external_access_integrations:
+      - PYPI_ACCESS_INTEGRATION
+    artifacts:
+      - streamlit_app.py
+      - pyproject.toml
+      - lib/config.py
+      - lib/ingest.py
+      - lib/session.py
+      - pages/1_run_history.py
+      - pages/2_error_explorer.py
+      - .streamlit/config.toml</pre>
     </div>
   </div>
 
   <h2 class="reveal">Redeploy after a code change</h2>
 
   <div class="reveal">
-    <p>Every subsequent deploy after a <code>git push</code> is just the three-step loop — no <code>--bootstrap</code>:</p>
     <div class="code-block">
-      <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
-      <pre>git push && scripts/deploy.sh -c oregon-sedemo</pre>
+      <div class="code-block-header"><span>bash — CLI deploy</span><button class="copy-btn">Copy</button></div>
+      <pre>git push && scripts/30_deploy.sh -c oregon-sedemo</pre>
     </div>
 
     <div class="tip">
       <span class="note-icon">✅</span>
       <div>
-        On push to <code>main</code>, GitHub Actions also runs this automatically —
-        see <a href="05-cicd.html">Chapter 5 (CI/CD)</a>.
+        On push to <code>main</code>, GitHub Actions runs <code>30_deploy.sh</code> automatically —
+        see <a href="05-cicd.html">Chapter 5 (CI/CD)</a>. You can also redeploy from the
+        Snowsight workspace by pressing <strong>Deploy</strong>.
       </div>
     </div>
   </div>
@@ -198,20 +214,11 @@ ALTER STREAMLIT SNOWFLAKE_LEARNING_DB.GIT_SIS.INGEST_CONSOLE
     <div class="code-block">
       <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
       <pre># Get the app URL and open it
-scripts/verify.sh --open -c oregon-sedemo
+scripts/40_verify.sh --open -c oregon-sedemo
 
 # Or just print the URL
 snow streamlit get-url -c oregon-sedemo \
   SNOWFLAKE_LEARNING_DB.GIT_SIS.INGEST_CONSOLE</pre>
-    </div>
-
-    <div class="note">
-      <span class="note-icon">💡</span>
-      <div>
-        <strong><code>EXECUTE STREAMLIT</code> is not supported on container runtime</strong>
-        (only on warehouse runtime). Browser verification is the correct approach —
-        open the URL and confirm the app is Active with live KPI tiles.
-      </div>
     </div>
   </div>
 
@@ -223,29 +230,31 @@ snow streamlit get-url -c oregon-sedemo \
     <div class="card-grid">
       <div class="card">
         <div class="card-icon">🔄</div>
-        <h4>99_cleanup.sql — reset demo</h4>
-        <p>Drops STREAMLIT, GIT REPOSITORY, GIT_SIS schema, and API integration.
+        <h4>90_cleanup.sh — reset demo</h4>
+        <p>Drops GIT_SIS schema, STREAMLIT, GIT REPOSITORY, and API integration.
            <strong>Keeps</strong> <code>GIT_SIS_INFRA.SECRETS.GITHUB_PAT</code>.
-           Next bootstrap needs no PAT re-entry.</p>
+           Rebuild with <code>10_setup.sh &amp;&amp; 30_deploy.sh</code> — no PAT re-entry.</p>
       </div>
       <div class="card">
         <div class="card-icon">☢️</div>
-        <h4>98_cleanup_infra.sql — full teardown</h4>
+        <h4>99_cleanup-infra.sh — full teardown</h4>
         <p>Also drops <code>GIT_SIS_INFRA</code> database and the PAT secret.
-           Only use when fully decommissioning the demo.</p>
+           Prompts for confirmation. Use <code>--yes</code> to skip.
+           Only for complete decommissioning.</p>
       </div>
     </div>
 
     <div class="code-block">
       <div class="code-block-header"><span>bash — normal reset (keeps PAT)</span><button class="copy-btn">Copy</button></div>
-      <pre>snow sql -c oregon-sedemo -f deploy/99_cleanup.sql</pre>
+      <pre>scripts/90_cleanup.sh -c oregon-sedemo</pre>
     </div>
 
     <div class="code-block">
       <div class="code-block-header"><span>bash — full decommission</span><button class="copy-btn">Copy</button></div>
-      <pre>snow sql -c oregon-sedemo -f deploy/98_cleanup_infra.sql</pre>
+      <pre>scripts/99_cleanup-infra.sh -c oregon-sedemo
+# or without confirmation prompt:
+scripts/99_cleanup-infra.sh -c oregon-sedemo --yes</pre>
     </div>
-    <p><code>PYPI_ACCESS_INTEGRATION</code> is a shared resource and is intentionally not dropped by either script.</p>
   </div>
 
   <!-- Footer -->

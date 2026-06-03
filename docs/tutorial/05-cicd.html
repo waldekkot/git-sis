@@ -153,7 +153,7 @@
       <text x="299" y="47" text-anchor="middle" fill="#8B949E"  font-size="9" font-family="monospace">app/lib/</text>
 
       <text x="479" y="30" text-anchor="middle" fill="#79C0FF"  font-size="9" font-family="monospace">pytest tests/unit/</text>
-      <text x="479" y="47" text-anchor="middle" fill="#3FB950"  font-size="9" font-family="monospace">13 tests · no SF · 0.04s</text>
+      <text x="479" y="47" text-anchor="middle" fill="#3FB950"  font-size="9" font-family="monospace">35 tests · no SF · 1s</text>
     </svg>
   </div>
 
@@ -219,6 +219,11 @@ uv run pre-commit install    # writes .git/hooks/pre-commit</pre>
       <strong>unit-tests</strong> (runs on every push and PR) and
       <strong>deploy-to-sis</strong> (only on push to main, after unit-tests pass).
     </p>
+    <p>
+      The deploy job uses <code>scripts/30_deploy.sh</code> which runs
+      <code>snow streamlit deploy -p app/ --replace</code> (workspace-native).
+      CI checks out the code from GitHub itself — no GIT REPOSITORY FETCH needed.
+    </p>
   </div>
 
   <div class="reveal">
@@ -276,16 +281,15 @@ jobs:
         run: |
           echo "$SF_PAT_TOKEN" > /tmp/sf_token.txt
           mkdir -p ~/.snowflake
-          cat > ~/.snowflake/config.toml &lt;&lt; 'TOML'
-          [connections.ci]
-          account = "sfseeurope-wkot_demo1"
-          user = "wkot"
-          authenticator = "PROGRAMMATIC_ACCESS_TOKEN"
-          token_file_path = "/tmp/sf_token.txt"
-          TOML
+          printf '[connections.ci]\naccount = "sfseeurope-wkot_demo1"\n\
+user = "wkot"\nauthenticator = "PROGRAMMATIC_ACCESS_TOKEN"\n\
+token_file_path = "/tmp/sf_token.txt"\n' > ~/.snowflake/config.toml
+          chmod 0600 ~/.snowflake/config.toml
         env:
           SF_PAT_TOKEN: ${{ secrets.SF_PAT_TOKEN }}
-      - run: scripts/deploy.sh -c ci</pre>
+      - name: Deploy to Snowflake SiS
+        # Workspace-native: uploads app/ via snow streamlit deploy
+        run: scripts/30_deploy.sh -c ci</pre>
     </div>
   </div>
 

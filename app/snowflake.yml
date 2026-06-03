@@ -1,0 +1,41 @@
+# snowflake.yml -- Workspace and CLI deployment config for the Ingestion Ops Console.
+#
+# Used by:
+#   - Snowsight Workspace "Deploy" button (open app/ in workspace → Deploy)
+#   - snow streamlit deploy (CLI and CI/CD):
+#       snow streamlit deploy -c <conn> -p app/ --replace
+#
+# Deploy flow: snow CLI uploads app/ files to GIT_SIS.STREAMLIT stage, then
+# creates/replaces the STREAMLIT object with container runtime settings.
+#
+# Ref: https://docs.snowflake.com/en/developer-guide/streamlit/app-development/creating-your-app
+
+definition_version: 2
+
+entities:
+  ingest_console:
+    type: streamlit
+    identifier:
+      name: INGEST_CONSOLE
+      schema: GIT_SIS
+      database: SNOWFLAKE_LEARNING_DB
+    title: "Ingestion Ops Console"
+    query_warehouse: COMPUTE_WH
+    compute_pool: SYSTEM_COMPUTE_POOL_CPU
+    runtime_name: SYSTEM$ST_CONTAINER_RUNTIME_PY3_11
+    main_file: streamlit_app.py
+    external_access_integrations:
+      - PYPI_ACCESS_INTEGRATION
+    # All files the running app needs. The stage is auto-created as
+    # SNOWFLAKE_LEARNING_DB.GIT_SIS.STREAMLIT on first deploy.
+    # List individual files/dirs explicitly to avoid uploading __pycache__.
+    artifacts:
+      - streamlit_app.py
+      - pyproject.toml
+      - .streamlit/config.toml
+      - pages/1_run_history.py
+      - pages/2_error_explorer.py
+      - lib/__init__.py
+      - lib/config.py
+      - lib/ingest.py
+      - lib/session.py

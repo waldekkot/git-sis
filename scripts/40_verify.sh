@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# verify.sh -- confirm the deployed app exists and print its URL.
+# 40_verify.sh -- confirm the deployed app exists and print its URL.
 #
 # Usage:
-#   scripts/verify.sh [options]
+#   scripts/40_verify.sh [options]
 #
 # Options:
 #   -c, --connection NAME   Snowflake CLI connection
@@ -12,13 +12,13 @@
 #       --version           Print version and exit
 
 set -euo pipefail
-source "$(dirname "$0")/_lib.sh"
+source "$(dirname "$0")/../lib/_lib.sh"
 
 OPEN_BROWSER=false
 
 show_help() {
     cat <<EOF
-git-sis $VERSION -- verify
+git-sis $VERSION -- 40_verify
 
 Checks that SNOWFLAKE_LEARNING_DB.GIT_SIS.INGEST_CONSOLE exists in the
 account and prints its Snowsight URL.
@@ -33,8 +33,8 @@ OPTIONS
         --version           Print version and exit
 
 EXAMPLES
-    scripts/verify.sh
-    scripts/verify.sh --open
+    scripts/40_verify.sh
+    scripts/40_verify.sh --open
 EOF
 }
 
@@ -55,7 +55,7 @@ snow sql -c "$CONN" -q \
     "SHOW STREAMLITS LIKE 'INGEST_CONSOLE' IN SCHEMA SNOWFLAKE_LEARNING_DB.GIT_SIS;"
 
 URL=$(snow streamlit get-url -c "$CONN" "$APP" 2>&1) || \
-    die "Could not get URL -- is the app deployed? Run scripts/deploy.sh first."
+    die "Could not get URL -- is the app deployed? Run scripts/30_deploy.sh first."
 
 success "App is live."
 echo ""

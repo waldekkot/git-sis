@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# run-local.sh -- launch the Ingestion Ops Console locally.
+# 20_run-local.sh -- launch the Ingestion Ops Console locally.
 #
 # Usage:
-#   scripts/run-local.sh [options]
+#   scripts/20_run-local.sh [options]
 #
 # Options:
 #   -c, --connection NAME   Snowflake CLI connection to use
@@ -12,13 +12,13 @@
 #       --version           Print version and exit
 
 set -euo pipefail
-source "$(dirname "$0")/_lib.sh"
+source "$(dirname "$0")/../lib/_lib.sh"
 
 PORT=8501
 
 show_help() {
     cat <<EOF
-git-sis $VERSION -- run-local
+git-sis $VERSION -- 20_run-local
 
 Runs the Streamlit app on your laptop against a real Snowflake connection.
 Uses the dual-mode session seam: sets SNOWFLAKE_DEFAULT_CONNECTION_NAME so
@@ -35,13 +35,16 @@ OPTIONS
 
 EXAMPLES
     # Default connection, default port
-    scripts/run-local.sh
+    scripts/20_run-local.sh
 
     # Custom port
-    scripts/run-local.sh -p 8533
+    scripts/20_run-local.sh -p 8533
 
     # Different connection
-    scripts/run-local.sh -c my-other-conn
+    scripts/20_run-local.sh -c my-other-conn
+
+NEXT STEP
+    scripts/30_deploy.sh   -- deploy to Snowflake SiS
 EOF
 }
 

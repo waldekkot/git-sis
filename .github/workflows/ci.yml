@@ -46,7 +46,7 @@ jobs:
       - name: Configure Snowflake CI connection
         # snow CLI requires token_file_path (inline token not supported).
         # Write the PAT from GitHub Secrets to a temp file, then create
-        # a named connection that scripts/deploy.sh can use with -c ci.
+        # a named connection that 30_deploy.sh uses with -c ci.
         # config.toml must be chmod 0600 or snow CLI refuses to read it.
         run: |
           echo "$SF_PAT_TOKEN" > /tmp/sf_token.txt
@@ -57,7 +57,8 @@ jobs:
         env:
           SF_PAT_TOKEN: ${{ secrets.SF_PAT_TOKEN }}
 
-      - name: Redeploy to Snowflake SiS
-        # Normal redeploy loop: FETCH → CREATE OR REPLACE STREAMLIT → ADD LIVE VERSION
-        # Do NOT pass --bootstrap; the git repo + API integration already exist.
-        run: scripts/deploy.sh -c ci
+      - name: Deploy to Snowflake SiS
+        # Workspace-native deploy: uploads app/ to Snowflake stage via snow streamlit deploy.
+        # Uses app/snowflake.yml for compute pool, runtime, EAI settings.
+        # No GIT REPOSITORY FETCH required -- CI checks out the code directly.
+        run: scripts/30_deploy.sh -c ci

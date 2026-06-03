@@ -20,3 +20,4 @@ token/
 # CoCo / IDE artifacts
 .snowflake/
 .coverage
+app/output/

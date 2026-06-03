@@ -22,7 +22,6 @@ from unittest.mock import patch as mock_patch
 
 import pandas as pd
 import pytest
-from lib import config as _cfg
 from lib.ingest import PROC_NAME, _synthetic_orders, get_kpis, get_run_history, run_ingestion
 from snowflake.snowpark import Session
 from snowflake.snowpark.functions import col, lit
@@ -34,6 +33,8 @@ from snowflake.snowpark.types import (
     StructType,
     TimestampType,
 )
+
+from lib import config as _cfg
 
 # ---------------------------------------------------------------------------
 # Fixtures

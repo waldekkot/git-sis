@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# _lib.sh -- shared helpers sourced by all git-sis scripts.
+# lib/_lib.sh -- shared helpers sourced by all git-sis scripts.
 # Do NOT execute directly.
 
 set -euo pipefail
 
 # ---- Version (read from root pyproject.toml) --------------------------------
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-_ROOT_DIR="$(dirname "$_SCRIPT_DIR")"
+_ROOT_DIR="$(dirname "$_SCRIPT_DIR")"   # parent of lib/ = project root
 
 VERSION=$(grep -m1 '^version' "$_ROOT_DIR/pyproject.toml" | grep -o '"[^"]*"' | tr -d '"')
 SCRIPT_NAME="$(basename "${BASH_SOURCE[1]:-$0}")"

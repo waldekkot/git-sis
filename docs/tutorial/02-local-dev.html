@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>git-sis Tutorial — Local Dev</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    /* ── Session seam fork diagram ──────────────────────────────── */
+    @keyframes branch-draw {
+      from { stroke-dashoffset: 80; }
+      to   { stroke-dashoffset: 0; }
+    }
+    @keyframes box-appear {
+      from { opacity: 0; transform: scale(.92); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+    .svg-anim .line-sis {
+      stroke-dasharray: 80; stroke-dashoffset: 80;
+      animation: branch-draw .6s ease forwards .5s;
+    }
+    .svg-anim .line-local {
+      stroke-dasharray: 80; stroke-dashoffset: 80;
+      animation: branch-draw .6s ease forwards 1s;
+    }
+    .svg-anim .box-sis   { opacity:0; animation: box-appear .4s ease forwards 1.1s; }
+    .svg-anim .box-local { opacity:0; animation: box-appear .4s ease forwards 1.6s; }
+
+    /* ── Test pyramid ───────────────────────────────────────────── */
+    @keyframes tier-rise {
+      from { transform: scaleY(0); transform-origin: bottom; }
+      to   { transform: scaleY(1); transform-origin: bottom; }
+    }
+    .svg-anim .tier-1 { animation: tier-rise .5s ease forwards .3s; transform-origin: bottom center; }
+    .svg-anim .tier-2 { animation: tier-rise .5s ease forwards .8s; transform-origin: bottom center; }
+    .svg-anim .tier-3 { animation: tier-rise .5s ease forwards 1.3s; transform-origin: bottom center; }
+  </style>
+</head>
+<body>
+
+<nav class="site-nav">
+  <a class="nav-logo" href="index.html">
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+      <path d="M11 2L3 6.5v9L11 20l8-4.5v-9L11 2z" fill="none" stroke="#29B5E8" stroke-width="1.5"/>
+      <circle cx="11" cy="11" r="3" fill="#29B5E8"/>
+    </svg>
+    git-sis
+  </a>
+  <span class="nav-chapter">Chapter 2 — Local Dev</span>
+  <span class="nav-pill">3 / 6</span>
+</nav>
+<div class="progress-bar"><div class="progress-fill" style="width:40%"></div></div>
+
+<main>
+  <div class="hero">
+    <h1>Local Dev &amp; <span class="highlight">The Session Seam</span></h1>
+    <p class="page-subtitle">Write once, run in two places. The app is identical on your laptop and inside Snowflake — only the session construction differs.</p>
+  </div>
+
+  <h2 class="reveal">The session seam</h2>
+
+  <div class="reveal">
+    <p>
+      <code>app/lib/session.py</code> is the entire seam between environments.
+      <code>get_active_session()</code> only exists inside Snowflake's runtime;
+      if the import fails, we fall back to a CLI-built session.
+    </p>
+  </div>
+
+  <!-- Session seam fork SVG -->
+  <div class="diagram-wrap reveal">
+    <svg class="svg-anim" viewBox="0 0 660 200" fill="none" xmlns="http://www.w3.org/2000/svg"
+         style="width:100%;max-width:660px" role="img" aria-label="Session seam fork diagram">
+
+      <!-- Trunk: get_session() -->
+      <rect x="220" y="20" width="220" height="46" rx="8" fill="#161B22" stroke="#29B5E8" stroke-width="1.5"/>
+      <text x="330" y="38" text-anchor="middle" fill="#8B949E" font-size="10" font-family="monospace">app/lib/session.py</text>
+      <text x="330" y="54" text-anchor="middle" fill="#E6EDF3" font-size="12" font-family="monospace" font-weight="600">get_session()</text>
+
+      <!-- Trunk line down -->
+      <line x1="330" y1="66" x2="330" y2="90" stroke="#30363D" stroke-width="1.5"/>
+
+      <!-- Fork label: try -->
+      <text x="222" y="108" text-anchor="middle" fill="#D29922" font-size="10" font-family="monospace">try</text>
+      <!-- Fork label: except -->
+      <text x="438" y="108" text-anchor="middle" fill="#FF7B72" font-size="10" font-family="monospace">except</text>
+
+      <!-- Branch lines -->
+      <path class="line-sis" d="M330 90 Q200 90 160 130"
+            stroke="#3FB950" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+      <path class="line-local" d="M330 90 Q460 90 500 130"
+            stroke="#58A6FF" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+
+      <!-- Box: SiS path -->
+      <g class="box-sis">
+        <rect x="40" y="130" width="240" height="52" rx="8" fill="#11567F" stroke="#3FB950" stroke-width="1.5"/>
+        <text x="160" y="151" text-anchor="middle" fill="#E6EDF3" font-size="10" font-family="monospace">get_active_session()</text>
+        <text x="160" y="168" text-anchor="middle" fill="#A5D6FF" font-size="9">↳ Inside Snowflake SiS</text>
+      </g>
+
+      <!-- Box: local path -->
+      <g class="box-local">
+        <rect x="380" y="130" width="240" height="52" rx="8" fill="#162032" stroke="#58A6FF" stroke-width="1.5"/>
+        <text x="500" y="151" text-anchor="middle" fill="#E6EDF3" font-size="10" font-family="monospace">Session.builder.config(</text>
+        <text x="500" y="163" text-anchor="middle" fill="#E6EDF3" font-size="10" font-family="monospace">  "connection_name", conn)</text>
+        <text x="500" y="176" text-anchor="middle" fill="#8B949E" font-size="9">↳ Local CLI connection</text>
+      </g>
+    </svg>
+  </div>
+
+  <div class="reveal">
+    <div class="code-block">
+      <div class="code-block-header"><span>app/lib/session.py</span><button class="copy-btn">Copy</button></div>
+      <pre>import os
+import streamlit as st
+from snowflake.snowpark import Session
+
+@st.cache_resource(show_spinner="Connecting to Snowflake...")
+def get_session() -> Session:
+    try:
+        from snowflake.snowpark.context import get_active_session
+        return get_active_session()          # ← inside SiS
+    except Exception:
+        conn = (
+            os.getenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME")
+            or "default"
+        )
+        return Session.builder.config(       # ← local
+            "connection_name", conn
+        ).create()</pre>
+    </div>
+
+    <div class="note">
+      <span class="note-icon">💡</span>
+      <div>
+        <code>@st.cache_resource</code> ensures the session is created once per
+        process. On SiS, Snowflake injects it; locally, the CLI connection is reused.
+        <strong>Zero code changes between environments.</strong>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="reveal">Run the app locally</h2>
+
+  <div class="reveal">
+    <div class="code-block">
+      <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
+      <pre># Option A: shell runner (recommended)
+scripts/run-local.sh -c oregon-sedemo
+
+# Option B: direct
+SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo \
+  uv run streamlit run app/streamlit_app.py</pre>
+    </div>
+
+    <p>Open <code>http://localhost:8501</code>. You should see the KPI tiles, the trigger panel, and a run history table.</p>
+  </div>
+
+  <h2 class="reveal">Test pyramid</h2>
+
+  <!-- Test pyramid SVG -->
+  <div class="diagram-wrap reveal">
+    <svg class="svg-anim" viewBox="0 0 500 220" fill="none" xmlns="http://www.w3.org/2000/svg"
+         style="width:100%;max-width:500px" role="img" aria-label="Three-tier test pyramid">
+
+      <!-- Tier 3: Integration (top, narrow) -->
+      <g class="tier-3">
+        <polygon points="250,30 310,90 190,90" fill="rgba(210,153,34,.25)" stroke="#D29922" stroke-width="1.5"/>
+        <text x="250" y="68" text-anchor="middle" fill="#D29922" font-size="10" font-weight="600">Integration</text>
+        <text x="250" y="81" text-anchor="middle" fill="#D29922" font-size="9">10 tests · real SF</text>
+      </g>
+
+      <!-- Tier 2: CI (middle) -->
+      <g class="tier-2">
+        <polygon points="190,90 310,90 360,150 140,150" fill="rgba(41,181,232,.18)" stroke="#29B5E8" stroke-width="1.5"/>
+        <text x="250" y="123" text-anchor="middle" fill="#29B5E8" font-size="11" font-weight="600">GitHub Actions CI</text>
+        <text x="250" y="139" text-anchor="middle" fill="#8B949E" font-size="9">unit + ruff · on every push</text>
+      </g>
+
+      <!-- Tier 1: Unit (base, widest) -->
+      <g class="tier-1">
+        <polygon points="140,150 360,150 420,200 80,200" fill="rgba(63,185,80,.2)" stroke="#3FB950" stroke-width="1.5"/>
+        <text x="250" y="178" text-anchor="middle" fill="#3FB950" font-size="12" font-weight="600">Unit Tests</text>
+        <text x="250" y="194" text-anchor="middle" fill="#8B949E" font-size="9">13 tests · no Snowflake · 0.04s</text>
+      </g>
+    </svg>
+  </div>
+
+  <div class="reveal">
+    <div class="code-block">
+      <div class="code-block-header"><span>bash — run tests</span><button class="copy-btn">Copy</button></div>
+      <pre># Tier 1: unit tests (no credentials, ~0.04s)
+uv run pytest tests/unit/ -v
+
+# Tier 3: integration tests (real Snowflake, ~35s, temp schema auto-cleaned)
+SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo \
+  uv run pytest tests/integration/ -v</pre>
+    </div>
+  </div>
+
+  <h2 class="reveal">Config and table isolation</h2>
+
+  <div class="reveal">
+    <p>
+      <code>app/lib/config.py</code> reads table FQNs from an environment variable:
+    </p>
+    <div class="code-block">
+      <div class="code-block-header"><span>app/lib/config.py</span><button class="copy-btn">Copy</button></div>
+      <pre>import os
+
+SCHEMA_FQN   = os.getenv("GIT_SIS_SCHEMA", "SNOWFLAKE_LEARNING_DB.GIT_SIS")
+ORDERS_TABLE = f"{SCHEMA_FQN}.ORDERS"
+INGEST_LOG_TABLE = f"{SCHEMA_FQN}.INGEST_LOG"</pre>
+    </div>
+
+    <p>
+      Integration tests set <code>GIT_SIS_SCHEMA=SNOWFLAKE_LEARNING_DB.GIT_SIS_TEST_&lt;uuid&gt;</code>
+      before importing, so they never touch production data. The temp schema is dropped automatically
+      after the test session.
+    </p>
+
+    <div class="warn">
+      <span class="note-icon">⚠️</span>
+      <div>
+        <strong>Import-by-value trap:</strong> Always use <code>from lib import config as _cfg</code>
+        and access <code>_cfg.ORDERS_TABLE</code> at call time. Using
+        <code>from lib.config import ORDERS_TABLE</code> captures the string at import time —
+        test schema overrides won't propagate.
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="page-footer">
+    <a id="btn-prev" class="nav-btn" href="01-setup.html">
+      ← <span><span class="nav-btn-label">Previous</span><span class="nav-btn-title">Setup</span></span>
+    </a>
+    <span class="footer-center">Chapter 2 of 5</span>
+    <a id="btn-next" class="nav-btn primary" href="03-github.html">
+      <span><span class="nav-btn-label">Next</span><span class="nav-btn-title">GitHub</span></span> →
+    </a>
+  </footer>
+</main>
+
+<script src="assets/main.js"></script>
+</body>
+</html>

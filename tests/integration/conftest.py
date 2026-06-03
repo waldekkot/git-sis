@@ -9,6 +9,7 @@ Run manually:
 A temporary test schema (GIT_SIS_TEST_<8-char uuid>) is created at session start
 and dropped at session end, so integration tests never touch production data.
 """
+
 from __future__ import annotations
 
 import os
@@ -16,7 +17,6 @@ import uuid
 
 import pytest
 from snowflake.snowpark import Session
-
 
 _CONN = os.getenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME")
 
@@ -71,7 +71,9 @@ def test_schema(sf_session) -> str:
 
     # Reload config so the new env var takes effect
     import importlib
+
     import lib.config as cfg
+
     importlib.reload(cfg)
 
     yield schema_fqn

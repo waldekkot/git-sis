@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>git-sis Tutorial — CI/CD</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    /* ── CI pipeline diagram ─────────────────────────────────────── */
+    @keyframes event-flash {
+      0%, 100% { opacity: 1; }
+      40%       { opacity: .3; }
+    }
+    @keyframes job-activate {
+      from { fill: #161B22; stroke: #30363D; }
+      to   { fill: #11567F; stroke: #29B5E8; }
+    }
+    @keyframes pipe-draw {
+      from { stroke-dashoffset: 100; }
+      to   { stroke-dashoffset: 0; }
+    }
+    @keyframes check-pop {
+      from { transform: scale(0); }
+      to   { transform: scale(1); }
+    }
+
+    .svg-anim .push-event { animation: event-flash 1.8s ease-in-out infinite; }
+    .svg-anim .job-1 { animation: job-activate .5s ease forwards .6s; }
+    .svg-anim .job-2 { animation: job-activate .5s ease forwards 1.4s; }
+    .svg-anim .pipe-1 { stroke-dasharray: 100; stroke-dashoffset: 100; animation: pipe-draw .6s ease forwards .3s; }
+    .svg-anim .pipe-2 { stroke-dasharray: 100; stroke-dashoffset: 100; animation: pipe-draw .6s ease forwards 1.1s; }
+    .svg-anim .pipe-3 { stroke-dasharray: 100; stroke-dashoffset: 100; animation: pipe-draw .6s ease forwards 1.9s; }
+    .svg-anim .check-1 { transform: scale(0); animation: check-pop .3s ease forwards 1.2s; }
+    .svg-anim .check-2 { transform: scale(0); animation: check-pop .3s ease forwards 2.5s; }
+
+    /* ── Pre-commit hook sequence ────────────────────────────────── */
+    @keyframes hook-pass {
+      0%   { fill: #161B22; }
+      60%  { fill: rgba(63,185,80,.2); }
+      100% { fill: rgba(63,185,80,.12); }
+    }
+    .svg-anim .hook-1 { animation: hook-pass .5s ease forwards .3s; }
+    .svg-anim .hook-2 { animation: hook-pass .5s ease forwards .7s; }
+    .svg-anim .hook-3 { animation: hook-pass .5s ease forwards 1.1s; }
+    .svg-anim .hook-4 { animation: hook-pass .5s ease forwards 1.5s; }
+  </style>
+</head>
+<body>
+
+<nav class="site-nav">
+  <a class="nav-logo" href="index.html">
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+      <path d="M11 2L3 6.5v9L11 20l8-4.5v-9L11 2z" fill="none" stroke="#29B5E8" stroke-width="1.5"/>
+      <circle cx="11" cy="11" r="3" fill="#29B5E8"/>
+    </svg>
+    git-sis
+  </a>
+  <span class="nav-chapter">Chapter 5 — CI/CD</span>
+  <span class="nav-pill">6 / 6</span>
+</nav>
+<div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
+
+<main>
+  <div class="hero">
+    <h1>Pre-commit Hooks &amp; <span class="highlight">GitHub Actions</span></h1>
+    <p class="page-subtitle">Lock quality gates on every commit. Auto-deploy to SiS on every push to main — zero manual steps after the first setup.</p>
+  </div>
+
+  <!-- CI pipeline SVG -->
+  <div class="diagram-wrap reveal">
+    <svg class="svg-anim" viewBox="0 0 640 165" fill="none" xmlns="http://www.w3.org/2000/svg"
+         style="width:100%;max-width:640px" role="img" aria-label="GitHub Actions CI/CD pipeline">
+
+      <!-- Push event -->
+      <rect class="push-event" x="10" y="55" width="105" height="60" rx="8"
+            fill="#21262D" stroke="#58A6FF" stroke-width="1.5"/>
+      <text x="63" y="80" text-anchor="middle" fill="#58A6FF" font-size="20">⬆</text>
+      <text x="63" y="98" text-anchor="middle" fill="#E6EDF3" font-size="10" font-weight="600">git push</text>
+      <text x="63" y="111" text-anchor="middle" fill="#8B949E" font-size="8">→ main</text>
+
+      <!-- Pipe 1 -->
+      <path class="pipe-1" d="M115 85 L165 85" stroke="#58A6FF" stroke-width="1.5" marker-end="url(#acicd)"/>
+
+      <!-- Job: unit-tests -->
+      <rect class="job-1" x="165" y="42" width="160" height="90" rx="8" stroke="#30363D" stroke-width="1.5"/>
+      <text x="245" y="68" text-anchor="middle" fill="#8B949E" font-size="9">unit-tests</text>
+      <text x="245" y="85" text-anchor="middle" fill="#E6EDF3" font-size="11" font-weight="600">ruff check</text>
+      <text x="245" y="100" text-anchor="middle" fill="#E6EDF3" font-size="11" font-weight="600">pytest unit</text>
+      <text x="245" y="118" text-anchor="middle" fill="#8B949E" font-size="8">ubuntu-latest · ~15s</text>
+
+      <!-- check mark for job-1 -->
+      <g class="check-1">
+        <circle cx="308" cy="45" r="11" fill="#3FB950"/>
+        <text x="308" y="50" text-anchor="middle" fill="white" font-size="13">✓</text>
+      </g>
+
+      <!-- Pipe 2 (needs: unit-tests) -->
+      <path class="pipe-2" d="M325 85 L375 85" stroke="#3FB950" stroke-width="1.5" marker-end="url(#acicd3)"/>
+      <text x="350" y="78" text-anchor="middle" fill="#8B949E" font-size="8">needs:</text>
+
+      <!-- Job: deploy-to-sis -->
+      <rect class="job-2" x="375" y="42" width="165" height="90" rx="8" stroke="#30363D" stroke-width="1.5"/>
+      <text x="458" y="68" text-anchor="middle" fill="#8B949E" font-size="9">deploy-to-sis</text>
+      <text x="458" y="85" text-anchor="middle" fill="#E6EDF3" font-size="11" font-weight="600">snow sql</text>
+      <text x="458" y="100" text-anchor="middle" fill="#E6EDF3" font-size="11" font-weight="600">scripts/deploy.sh</text>
+      <text x="458" y="118" text-anchor="middle" fill="#8B949E" font-size="8">main branch only</text>
+
+      <!-- check mark for job-2 -->
+      <g class="check-2">
+        <circle cx="523" cy="45" r="11" fill="#3FB950"/>
+        <text x="523" y="50" text-anchor="middle" fill="white" font-size="13">✓</text>
+      </g>
+
+      <!-- Pipe 3: to SiS icon -->
+      <path class="pipe-3" d="M540 85 L582 85" stroke="#29B5E8" stroke-width="1.5" marker-end="url(#acicd2)"/>
+
+      <!-- SiS result -->
+      <text x="610" y="81" text-anchor="middle" font-size="26">❄️</text>
+      <text x="610" y="105" text-anchor="middle" fill="#29B5E8" font-size="10" font-weight="600">Live</text>
+
+      <defs>
+        <marker id="acicd"  markerWidth="7" markerHeight="7" refX="5" refY="2.5" orient="auto">
+          <path d="M0,0 L0,5 L7,2.5 z" fill="#58A6FF"/>
+        </marker>
+        <marker id="acicd2" markerWidth="7" markerHeight="7" refX="5" refY="2.5" orient="auto">
+          <path d="M0,0 L0,5 L7,2.5 z" fill="#29B5E8"/>
+        </marker>
+        <marker id="acicd3" markerWidth="7" markerHeight="7" refX="5" refY="2.5" orient="auto">
+          <path d="M0,0 L0,5 L7,2.5 z" fill="#3FB950"/>
+        </marker>
+      </defs>
+    </svg>
+  </div>
+
+  <h2 class="reveal">Part A — Pre-commit hooks</h2>
+
+  <!-- Hook sequence SVG -->
+  <div class="diagram-wrap reveal" style="padding:20px 16px">
+    <svg class="svg-anim" viewBox="0 0 600 68" fill="none" xmlns="http://www.w3.org/2000/svg"
+         style="width:100%;max-width:600px" role="img" aria-label="Pre-commit hook sequence">
+      <rect class="hook-1" x="0"   y="8" width="110" height="52" rx="7" stroke="#3FB950" stroke-width="1"/>
+      <rect class="hook-2" x="122" y="8" width="110" height="52" rx="7" stroke="#3FB950" stroke-width="1"/>
+      <rect class="hook-3" x="244" y="8" width="110" height="52" rx="7" stroke="#3FB950" stroke-width="1"/>
+      <rect class="hook-4" x="366" y="8" width="225" height="52" rx="7" stroke="#3FB950" stroke-width="1"/>
+
+      <text x="55"  y="30" text-anchor="middle" fill="#8B949E" font-size="9" font-family="monospace">trailing-ws</text>
+      <text x="55"  y="47" text-anchor="middle" fill="#8B949E" font-size="9" font-family="monospace">end-of-file</text>
+
+      <text x="177" y="30" text-anchor="middle" fill="#FF7B72"  font-size="9" font-family="monospace">ruff check</text>
+      <text x="177" y="47" text-anchor="middle" fill="#8B949E"  font-size="9" font-family="monospace">ruff format</text>
+
+      <text x="299" y="30" text-anchor="middle" fill="#D2A8FF"  font-size="9" font-family="monospace">ty check</text>
+      <text x="299" y="47" text-anchor="middle" fill="#8B949E"  font-size="9" font-family="monospace">app/lib/</text>
+
+      <text x="479" y="30" text-anchor="middle" fill="#79C0FF"  font-size="9" font-family="monospace">pytest tests/unit/</text>
+      <text x="479" y="47" text-anchor="middle" fill="#3FB950"  font-size="9" font-family="monospace">13 tests · no SF · 0.04s</text>
+    </svg>
+  </div>
+
+  <div class="reveal">
+    <h3>One-time setup</h3>
+    <div class="code-block">
+      <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
+      <pre>uv sync                      # installs pre-commit + ty into .venv
+uv run pre-commit install    # writes .git/hooks/pre-commit</pre>
+    </div>
+
+    <h3>Test all hooks manually</h3>
+    <div class="code-block">
+      <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
+      <pre>uvx pre-commit run --all-files
+# All 8 hooks should print "Passed"</pre>
+    </div>
+  </div>
+
+  <div class="reveal">
+    <h3>The .pre-commit-config.yaml</h3>
+    <div class="code-block">
+      <div class="code-block-header"><span>.pre-commit-config.yaml</span><button class="copy-btn">Copy</button></div>
+      <pre>repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.15
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: ty
+        name: ty (type check)
+        entry: uv run ty check app/lib/
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: pytest-unit
+        name: pytest unit (no Snowflake)
+        entry: uv run pytest tests/unit/ --tb=short -q
+        language: system
+        types: [python]
+        pass_filenames: false</pre>
+    </div>
+  </div>
+
+  <h2 class="reveal">Part B — GitHub Actions CICD</h2>
+
+  <div class="reveal">
+    <p>
+      The <code>.github/workflows/ci.yml</code> has two jobs:
+      <strong>unit-tests</strong> (runs on every push and PR) and
+      <strong>deploy-to-sis</strong> (only on push to main, after unit-tests pass).
+    </p>
+  </div>
+
+  <div class="reveal">
+    <h3>Add the required GitHub Secret</h3>
+    <ol class="steps">
+      <li>Read your Snowflake Programmatic Access Token value from the local token file</li>
+      <li>Go to your GitHub repo → <strong>Settings → Secrets and variables → Actions</strong></li>
+      <li>Click <strong>New repository secret</strong></li>
+      <li>Name: <code>SF_PAT_TOKEN</code>, Value: the raw token string</li>
+    </ol>
+
+    <div class="warn">
+      <span class="note-icon">⚠️</span>
+      <div>
+        <strong>Note on token expiry:</strong> Snowflake PAT tokens may have an expiration date.
+        If the deploy job starts failing with auth errors, regenerate the token and update the GitHub Secret.
+      </div>
+    </div>
+  </div>
+
+  <div class="reveal">
+    <h3>The CI workflow</h3>
+    <div class="code-block">
+      <div class="code-block-header"><span>.github/workflows/ci.yml</span><button class="copy-btn">Copy</button></div>
+      <pre>name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit-tests:
+    name: Unit tests + lint (no Snowflake)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with: { version: "latest" }
+      - run: uv sync
+      - run: uv run pytest tests/unit/ -v --tb=short
+      - run: uv run ruff check app/
+
+  deploy-to-sis:
+    name: Deploy to SiS (main only)
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with: { version: "latest" }
+      - run: uv tool install snowflake-cli
+      - name: Configure Snowflake CI connection
+        run: |
+          echo "$SF_PAT_TOKEN" > /tmp/sf_token.txt
+          mkdir -p ~/.snowflake
+          cat > ~/.snowflake/config.toml &lt;&lt; 'TOML'
+          [connections.ci]
+          account = "sfseeurope-wkot_demo1"
+          user = "wkot"
+          authenticator = "PROGRAMMATIC_ACCESS_TOKEN"
+          token_file_path = "/tmp/sf_token.txt"
+          TOML
+        env:
+          SF_PAT_TOKEN: ${{ secrets.SF_PAT_TOKEN }}
+      - run: scripts/deploy.sh -c ci</pre>
+    </div>
+  </div>
+
+  <div class="tip reveal">
+    <span class="note-icon">🚀</span>
+    <div>
+      <strong>Full cycle completed!</strong> Your workflow is now:
+      <code>git commit</code> (pre-commit runs) →
+      <code>git push</code> (CI: tests pass + SiS redeploys) →
+      visit the app URL to see the live update.
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="card-grid reveal">
+    <a class="card" href="index.html">
+      <div class="card-icon">🏠</div>
+      <h4>Back to Overview</h4>
+      <p>Revisit the architecture and chapter index.</p>
+    </a>
+    <a class="card" href="04-deploy.html">
+      <div class="card-icon">❄️</div>
+      <h4>Deploy to SiS</h4>
+      <p>Review the deploy loop and cleanup commands.</p>
+    </a>
+    <a class="card" href="https://github.com/waldekkot/git-sis" target="_blank" rel="noopener">
+      <div class="card-icon">🐙</div>
+      <h4>Source code</h4>
+      <p>Browse the full repo on GitHub.</p>
+    </a>
+  </div>
+
+  <!-- Footer -->
+  <footer class="page-footer">
+    <a id="btn-prev" class="nav-btn" href="04-deploy.html">
+      ← <span><span class="nav-btn-label">Previous</span><span class="nav-btn-title">Deploy to SiS</span></span>
+    </a>
+    <span class="footer-center">Chapter 5 of 5 · End of tutorial</span>
+    <a id="btn-next" class="nav-btn" href="index.html">
+      <span><span class="nav-btn-label">Start over</span><span class="nav-btn-title">Overview</span></span> →
+    </a>
+  </footer>
+</main>
+
+<script src="assets/main.js"></script>
+</body>
+</html>

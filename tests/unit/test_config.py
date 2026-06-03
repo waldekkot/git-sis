@@ -1,4 +1,5 @@
 """Unit tests for lib.config -- no Snowflake connection required."""
+
 from __future__ import annotations
 
 import importlib

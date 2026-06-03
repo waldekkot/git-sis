@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>git-sis Tutorial — Overview</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    /* ── Architecture flow SVG ─────────────────────────────────── */
+    .arch-svg { width: 100%; max-width: 780px; }
+
+    /* Node pulse */
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .55; }
+    }
+
+    /* Arrow draw */
+    @keyframes draw-arrow {
+      from { stroke-dashoffset: 120; }
+      to   { stroke-dashoffset: 0; }
+    }
+
+    /* Label fade in */
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .svg-anim .node-laptop { animation: pulse 2.4s ease-in-out infinite; }
+    .svg-anim .node-github { animation: pulse 2.4s ease-in-out 0.8s infinite; }
+    .svg-anim .node-sf     { animation: pulse 2.4s ease-in-out 1.6s infinite; }
+
+    .svg-anim .arrow-1 {
+      stroke-dasharray: 120;
+      stroke-dashoffset: 120;
+      animation: draw-arrow 1s ease forwards 0.4s;
+    }
+    .svg-anim .arrow-2 {
+      stroke-dasharray: 120;
+      stroke-dashoffset: 120;
+      animation: draw-arrow 1s ease forwards 1.2s;
+    }
+
+    .svg-anim .lbl-1 { opacity: 0; animation: fade-in .5s ease forwards 1.2s; }
+    .svg-anim .lbl-2 { opacity: 0; animation: fade-in .5s ease forwards 2.1s; }
+    .svg-anim .lbl-3 { opacity: 0; animation: fade-in .5s ease forwards 0.2s; }
+  </style>
+</head>
+<body>
+
+<nav class="site-nav">
+  <a class="nav-logo" href="index.html">
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+      <path d="M11 2L3 6.5v9L11 20l8-4.5v-9L11 2z" fill="none" stroke="#29B5E8" stroke-width="1.5"/>
+      <circle cx="11" cy="11" r="3" fill="#29B5E8"/>
+    </svg>
+    git-sis
+  </a>
+  <span class="nav-chapter">End-to-end tutorial</span>
+  <span class="nav-pill">1 / 6</span>
+</nav>
+<div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
+
+<main>
+  <div class="hero">
+    <h1>Git-connected <span class="highlight">Streamlit-in-Snowflake</span><br>Ingestion Console</h1>
+    <p class="page-subtitle">
+      A step-by-step tutorial covering the full workflow: local Python dev → GitHub →
+      Snowflake SiS on container runtime — driven entirely from the <code>snow</code> CLI.
+    </p>
+  </div>
+
+  <!-- Architecture SVG -->
+  <div class="diagram-wrap reveal">
+    <svg class="arch-svg svg-anim" viewBox="0 0 760 220" fill="none" xmlns="http://www.w3.org/2000/svg"
+         role="img" aria-label="Architecture flow: Local Dev → GitHub → Snowflake SiS">
+
+      <!-- Background grid lines (subtle) -->
+      <line x1="0" y1="110" x2="760" y2="110" stroke="#30363D" stroke-width="1" stroke-dasharray="4 8"/>
+
+      <!-- Arrow 1: Laptop → GitHub -->
+      <path class="arrow-1" d="M195 110 L320 110"
+            stroke="#29B5E8" stroke-width="2" stroke-linecap="round"
+            marker-end="url(#arrowhead)"/>
+
+      <!-- Arrow 2: GitHub → Snowflake -->
+      <path class="arrow-2" d="M445 110 L575 110"
+            stroke="#29B5E8" stroke-width="2" stroke-linecap="round"
+            marker-end="url(#arrowhead)"/>
+
+      <!-- Node: Laptop (local dev) -->
+      <g class="node-laptop">
+        <rect x="40" y="60" width="155" height="100" rx="12"
+              fill="#161B22" stroke="#29B5E8" stroke-width="1.5"/>
+        <text x="117" y="95" text-anchor="middle" fill="#E6EDF3" font-size="28">💻</text>
+        <text x="117" y="120" text-anchor="middle" fill="#E6EDF3" font-size="13" font-weight="600">Local Dev</text>
+        <text x="117" y="138" text-anchor="middle" fill="#8B949E" font-size="10">Streamlit + Snowpark</text>
+      </g>
+
+      <!-- Node: GitHub -->
+      <g class="node-github">
+        <rect x="320" y="60" width="125" height="100" rx="12"
+              fill="#161B22" stroke="#30363D" stroke-width="1.5"/>
+        <text x="383" y="95" text-anchor="middle" fill="#E6EDF3" font-size="28">🐙</text>
+        <text x="383" y="120" text-anchor="middle" fill="#E6EDF3" font-size="13" font-weight="600">GitHub</text>
+        <text x="383" y="138" text-anchor="middle" fill="#8B949E" font-size="10">git push + CI</text>
+      </g>
+
+      <!-- Node: Snowflake SiS -->
+      <g class="node-sf">
+        <rect x="575" y="60" width="145" height="100" rx="12"
+              fill="#11567F" stroke="#29B5E8" stroke-width="1.5"/>
+        <text x="647" y="95" text-anchor="middle" fill="#E6EDF3" font-size="28">❄️</text>
+        <text x="647" y="120" text-anchor="middle" fill="#E6EDF3" font-size="13" font-weight="600">Snowflake SiS</text>
+        <text x="647" y="138" text-anchor="middle" fill="#A5D6FF" font-size="10">Container runtime</text>
+      </g>
+
+      <!-- Arrow labels -->
+      <text class="lbl-1" x="258" y="100" text-anchor="middle" fill="#58A6FF" font-size="10">git push</text>
+      <text class="lbl-2" x="510" y="100" text-anchor="middle" fill="#58A6FF" font-size="10">GIT REPOSITORY</text>
+      <text class="lbl-2" x="510" y="113" text-anchor="middle" fill="#58A6FF" font-size="10">FETCH + deploy</text>
+
+      <!-- Port labels below diagram -->
+      <text class="lbl-3" x="117" y="182" text-anchor="middle" fill="#3FB950" font-size="10">✓ Unit + Integration tests</text>
+      <text class="lbl-1" x="383" y="182" text-anchor="middle" fill="#3FB950" font-size="10">✓ CI: ruff + unit tests</text>
+      <text class="lbl-2" x="647" y="182" text-anchor="middle" fill="#3FB950" font-size="10">✓ SiS deploy on push to main</text>
+
+      <!-- Arrowhead marker -->
+      <defs>
+        <marker id="arrowhead" markerWidth="8" markerHeight="8"
+                refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#29B5E8"/>
+        </marker>
+      </defs>
+    </svg>
+  </div>
+
+  <h2 class="reveal">What this tutorial covers</h2>
+
+  <div class="card-grid reveal">
+    <a class="card" href="01-setup.html">
+      <div class="card-icon">⚙️</div>
+      <h4>1 · Setup</h4>
+      <p>Prerequisites, project layout, and environment setup.</p>
+    </a>
+    <a class="card" href="02-local-dev.html">
+      <div class="card-icon">🖥️</div>
+      <h4>2 · Local Dev</h4>
+      <p>The session seam pattern — write once, run in two places.</p>
+    </a>
+    <a class="card" href="03-github.html">
+      <div class="card-icon">🐙</div>
+      <h4>3 · GitHub</h4>
+      <p>Push to GitHub and wire Snowflake's GIT REPOSITORY object.</p>
+    </a>
+    <a class="card" href="04-deploy.html">
+      <div class="card-icon">❄️</div>
+      <h4>4 · Deploy to SiS</h4>
+      <p>Container-runtime deploy, redeploy loop, browser verify.</p>
+    </a>
+    <a class="card" href="05-cicd.html">
+      <div class="card-icon">🚀</div>
+      <h4>5 · CI/CD</h4>
+      <p>Pre-commit hooks and GitHub Actions auto-deploy on push.</p>
+    </a>
+  </div>
+
+  <h2 class="reveal">Key concepts</h2>
+
+  <div class="reveal">
+    <h3>The session seam</h3>
+    <p>
+      The app runs unchanged in two environments. A single try/except in
+      <code>app/lib/session.py</code> picks the right connection:
+      <code>get_active_session()</code> inside Snowflake, or a CLI-built
+      <code>Session</code> locally.
+    </p>
+
+    <h3>git-connected deploy</h3>
+    <p>
+      Snowflake clones your GitHub repo via a
+      <strong>GIT REPOSITORY</strong> object and an API integration with
+      a stored PAT secret. The Streamlit app is deployed directly from
+      the cloned branch — no file uploads, no manual sync.
+    </p>
+
+    <h3>Three-tier dev loop</h3>
+    <p>
+      <span class="badge badge-blue">Tier 1</span> Unit tests — no Snowflake, zero credentials, runs in milliseconds.<br>
+      <span class="badge badge-yellow">Tier 2</span> GitHub Actions CI — unit tests + ruff on every push.<br>
+      <span class="badge badge-green">Tier 3</span> Integration tests — real Snowflake, isolated temp schema, run locally.
+    </p>
+  </div>
+
+  <div class="note reveal">
+    <span class="note-icon">💡</span>
+    <div>
+      <strong>Prerequisites:</strong> Python 3.11+, <a href="https://docs.astral.sh/uv/">uv</a>,
+      <a href="https://docs.snowflake.com/en/developer-guide/snowflake-cli/index">snow CLI</a>,
+      a Snowflake account (SYSADMIN + ACCOUNTADMIN access), and a GitHub account.
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="page-footer">
+    <span></span>
+    <span class="footer-center">git-sis tutorial · git-connected Streamlit-in-Snowflake</span>
+    <a id="btn-next" class="nav-btn primary" href="01-setup.html">
+      <span>
+        <span class="nav-btn-label">Next</span>
+        <span class="nav-btn-title">Setup</span>
+      </span>
+      →
+    </a>
+  </footer>
+</main>
+
+<script src="assets/main.js"></script>
+</body>
+</html>

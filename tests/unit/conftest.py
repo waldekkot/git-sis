@@ -1,4 +1,5 @@
 """Shared fixtures for unit tests (no Snowflake connection required)."""
+
 import pytest
 from snowflake.snowpark import Session
 

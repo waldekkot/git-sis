@@ -8,6 +8,7 @@ Design notes:
   Here we only verify the function is importable and returns a DF-like object
   via a mock session.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -15,15 +16,13 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
-
-from snowflake.snowpark.functions import lit as real_lit
-
 from lib.ingest import PROC_NAME, get_kpis, get_run_history, run_ingestion
-
+from snowflake.snowpark.functions import lit as real_lit
 
 # ---------------------------------------------------------------------------
 # Shared fixture
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def mock_session():
@@ -42,6 +41,7 @@ def mock_session():
 # ---------------------------------------------------------------------------
 # run_ingestion -- success path
 # ---------------------------------------------------------------------------
+
 
 def test_run_ingestion_success_returns_summary(mock_session):
     run_id = str(uuid.uuid4())
@@ -66,8 +66,10 @@ def test_run_ingestion_success_calls_save_as_table(mock_session):
 def test_run_ingestion_success_logs_running_then_success(mock_session):
     run_id = str(uuid.uuid4())
     # Spy on lib.ingest.lit to capture the plain values passed to Column wrappers.
-    with patch("lib.ingest._synthetic_orders", return_value=MagicMock()), \
-         patch("lib.ingest.lit", wraps=real_lit) as mock_lit:
+    with (
+        patch("lib.ingest._synthetic_orders", return_value=MagicMock()),
+        patch("lib.ingest.lit", wraps=real_lit) as mock_lit,
+    ):
         run_ingestion(mock_session, run_id, num_rows=10)
 
     # _log_start: session.sql called with run_id and PROC_NAME as params
@@ -86,6 +88,7 @@ def test_run_ingestion_success_logs_running_then_success(mock_session):
 # ---------------------------------------------------------------------------
 # run_ingestion -- failure path
 # ---------------------------------------------------------------------------
+
 
 def test_run_ingestion_fail_reraises(mock_session):
     with pytest.raises(ValueError, match="Injected failure"):
@@ -109,13 +112,16 @@ def test_run_ingestion_fail_error_message_captured(mock_session):
             run_ingestion(mock_session, run_id, fail=True)
 
     # lit(error_msg) is called with the error message string
-    lit_str_values = [c.args[0] for c in mock_lit.call_args_list if c.args and isinstance(c.args[0], str)]
+    lit_str_values = [
+        c.args[0] for c in mock_lit.call_args_list if c.args and isinstance(c.args[0], str)
+    ]
     assert any("Injected failure" in v for v in lit_str_values)
 
 
 # ---------------------------------------------------------------------------
 # get_kpis
 # ---------------------------------------------------------------------------
+
 
 def test_get_kpis_returns_all_keys(mock_session):
     row = MagicMock()
@@ -147,6 +153,7 @@ def test_get_kpis_values_match_row(mock_session):
 # ---------------------------------------------------------------------------
 # get_run_history
 # ---------------------------------------------------------------------------
+
 
 def test_get_run_history_returns_dataframe(mock_session):
     expected = pd.DataFrame({"STATUS": ["SUCCESS", "FAILED"], "RUN_ID": ["r1", "r2"]})

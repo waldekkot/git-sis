@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>git-sis Tutorial — Setup</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    /* ── Repo tree SVG ──────────────────────────────────────────── */
+    @keyframes blink-cursor {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0; }
+    }
+    .svg-anim .cursor { animation: blink-cursor .9s step-start infinite; }
+
+    @keyframes tree-reveal {
+      from { opacity: 0; transform: translateX(-8px); }
+      to   { opacity: 1; transform: none; }
+    }
+    .svg-anim .tr1 { opacity:0; animation: tree-reveal .3s ease forwards .3s; }
+    .svg-anim .tr2 { opacity:0; animation: tree-reveal .3s ease forwards .55s; }
+    .svg-anim .tr3 { opacity:0; animation: tree-reveal .3s ease forwards .75s; }
+    .svg-anim .tr4 { opacity:0; animation: tree-reveal .3s ease forwards .95s; }
+    .svg-anim .tr5 { opacity:0; animation: tree-reveal .3s ease forwards 1.15s; }
+    .svg-anim .tr6 { opacity:0; animation: tree-reveal .3s ease forwards 1.35s; }
+    .svg-anim .tr7 { opacity:0; animation: tree-reveal .3s ease forwards 1.55s; }
+    .svg-anim .tr8 { opacity:0; animation: tree-reveal .3s ease forwards 1.75s; }
+  </style>
+</head>
+<body>
+
+<nav class="site-nav">
+  <a class="nav-logo" href="index.html">
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+      <path d="M11 2L3 6.5v9L11 20l8-4.5v-9L11 2z" fill="none" stroke="#29B5E8" stroke-width="1.5"/>
+      <circle cx="11" cy="11" r="3" fill="#29B5E8"/>
+    </svg>
+    git-sis
+  </a>
+  <span class="nav-chapter">Chapter 1 — Setup</span>
+  <span class="nav-pill">2 / 6</span>
+</nav>
+<div class="progress-bar"><div class="progress-fill" style="width:20%"></div></div>
+
+<main>
+  <div class="hero">
+    <h1>Setup &amp; <span class="highlight">Prerequisites</span></h1>
+    <p class="page-subtitle">Install the toolchain, clone the repo, and create the Snowflake schema before writing a single line of app code.</p>
+  </div>
+
+  <!-- Repo tree SVG -->
+  <div class="diagram-wrap reveal">
+    <svg class="svg-anim" viewBox="0 0 540 230" fill="none" xmlns="http://www.w3.org/2000/svg"
+         style="width:100%;max-width:540px" role="img" aria-label="Project directory tree">
+      <!-- Terminal window chrome -->
+      <rect width="540" height="230" rx="10" fill="#161B22" stroke="#30363D" stroke-width="1"/>
+      <rect width="540" height="32" rx="10" fill="#21262D"/>
+      <rect y="22" width="540" height="10" fill="#21262D"/>
+      <circle cx="20" cy="16" r="5" fill="#F85149" opacity=".8"/>
+      <circle cx="38" cy="16" r="5" fill="#D29922" opacity=".8"/>
+      <circle cx="56" cy="16" r="5" fill="#3FB950" opacity=".8"/>
+      <text x="270" y="21" text-anchor="middle" fill="#8B949E" font-size="11" font-family="monospace">git-sis</text>
+
+      <!-- Tree content -->
+      <text x="20" y="60" fill="#79C0FF" font-size="12" font-family="monospace" class="tr1">📁 git-sis/</text>
+      <text x="28" y="78" fill="#8B949E" font-size="11" font-family="monospace" class="tr2">├── 📁 app/          <tspan fill="#3FB950">← SiS app root</tspan></text>
+      <text x="28" y="94" fill="#8B949E" font-size="11" font-family="monospace" class="tr3">│   ├── streamlit_app.py   <tspan fill="#D29922">← MAIN_FILE</tspan></text>
+      <text x="28" y="110" fill="#8B949E" font-size="11" font-family="monospace" class="tr4">│   ├── lib/          <tspan fill="#8B949E">(session, ingest, config)</tspan></text>
+      <text x="28" y="126" fill="#8B949E" font-size="11" font-family="monospace" class="tr5">│   └── pyproject.toml  <tspan fill="#D29922">← required by container runtime</tspan></text>
+      <text x="28" y="142" fill="#8B949E" font-size="11" font-family="monospace" class="tr6">├── 📁 deploy/        <tspan fill="#8B949E">(SQL setup / cleanup)</tspan></text>
+      <text x="28" y="158" fill="#8B949E" font-size="11" font-family="monospace" class="tr7">├── 📁 scripts/       <tspan fill="#8B949E">(shell runners)</tspan></text>
+      <text x="28" y="174" fill="#8B949E" font-size="11" font-family="monospace" class="tr8">├── 📁 tests/         <tspan fill="#8B949E">(unit/ + integration/)</tspan></text>
+      <text x="28" y="190" fill="#8B949E" font-size="11" font-family="monospace" class="tr8">├── .pre-commit-config.yaml</text>
+      <text x="28" y="207" fill="#8B949E" font-size="11" font-family="monospace" class="tr8">└── .github/workflows/ci.yml</text>
+
+      <!-- Blinking cursor -->
+      <rect x="20" y="211" width="8" height="13" fill="#29B5E8" class="cursor" rx="1"/>
+    </svg>
+  </div>
+
+  <h2 class="reveal">Prerequisites</h2>
+
+  <div class="card-grid reveal">
+    <div class="card">
+      <div class="card-icon">🐍</div>
+      <h4>Python 3.11+</h4>
+      <p>uv manages the interpreter — you don't need it pre-installed.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">📦</div>
+      <h4>uv</h4>
+      <p>Fast Python package manager. Replaces pip + venv + pip-tools.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">❄️</div>
+      <h4>snow CLI</h4>
+      <p>Snowflake CLI for running SQL, deploying Streamlit apps.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🐙</div>
+      <h4>GitHub account</h4>
+      <p>Private repo + a classic Personal Access Token (repo scope).</p>
+    </div>
+  </div>
+
+  <h2 class="reveal">Install the toolchain</h2>
+
+  <div class="reveal">
+    <div class="code-block">
+      <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
+      <pre># Install uv (macOS / Linux)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install snow CLI
+pip install snowflake-cli
+
+# Verify
+uv --version     # 0.x.x
+snow --version   # 3.x.x</pre>
+    </div>
+  </div>
+
+  <h2 class="reveal">Clone and install dependencies</h2>
+
+  <div class="reveal">
+    <div class="code-block">
+      <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
+      <pre>git clone https://github.com/waldekkot/git-sis
+cd git-sis
+uv sync          # creates .venv, installs all deps (including dev group)</pre>
+    </div>
+  </div>
+
+  <h2 class="reveal">Configure your Snowflake connection</h2>
+
+  <div class="reveal">
+    <p>Add a named connection to <code>~/.snowflake/connections.toml</code>:</p>
+    <div class="code-block">
+      <div class="code-block-header"><span>~/.snowflake/connections.toml</span><button class="copy-btn">Copy</button></div>
+      <pre>[oregon-sedemo]
+account          = "sfseeurope-wkot_demo1"
+user             = "wkot"
+authenticator    = "PROGRAMMATIC_ACCESS_TOKEN"
+token_file_path  = "/path/to/your/pat-token.txt"</pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-block-header"><span>bash — verify connection</span><button class="copy-btn">Copy</button></div>
+      <pre>snow connection test -c oregon-sedemo
+# Expected: ✔ Connection successful</pre>
+    </div>
+  </div>
+
+  <h2 class="reveal">Create the DEV schema and tables</h2>
+
+  <div class="reveal">
+    <p>
+      <code>deploy/00_setup_env.sql</code> is idempotent — safe to run multiple times.
+      It creates the <code>GIT_SIS</code> schema, <code>ORDERS</code>, and <code>INGEST_LOG</code>.
+    </p>
+    <div class="code-block">
+      <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
+      <pre>snow sql -c oregon-sedemo -f deploy/00_setup_env.sql
+# Expected: "Setup complete" with DB and SCHEMA columns</pre>
+    </div>
+  </div>
+
+  <div class="tip reveal">
+    <span class="note-icon">✅</span>
+    <div>
+      <strong>Install pre-commit hooks now</strong> so every commit is quality-gated from the start.
+      <div class="code-block" style="margin-top:12px">
+        <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
+        <pre>uv run pre-commit install
+# pre-commit installed at .git/hooks/pre-commit</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="page-footer">
+    <a id="btn-prev" class="nav-btn" href="index.html">
+      ← <span><span class="nav-btn-label">Previous</span><span class="nav-btn-title">Overview</span></span>
+    </a>
+    <span class="footer-center">Chapter 1 of 5</span>
+    <a id="btn-next" class="nav-btn primary" href="02-local-dev.html">
+      <span><span class="nav-btn-label">Next</span><span class="nav-btn-title">Local Dev</span></span> →
+    </a>
+  </footer>
+</main>
+
+<script src="assets/main.js"></script>
+</body>
+</html>

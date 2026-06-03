@@ -6,14 +6,14 @@ All tests use the temporary schema created by the test_schema fixture in conftes
 Run:
     SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo uv run pytest tests/integration/ -v
 """
+
 from __future__ import annotations
 
 import importlib
 import uuid
 
-import pytest
-
 import lib.config as cfg
+import pytest
 from lib.ingest import get_kpis, get_run_history, run_ingestion
 
 
@@ -26,6 +26,7 @@ def _reload_config(test_schema):
 # ---------------------------------------------------------------------------
 # run_ingestion -- success path
 # ---------------------------------------------------------------------------
+
 
 def test_success_path_returns_summary(sf_session, test_schema):
     run_id = str(uuid.uuid4())
@@ -77,6 +78,7 @@ def test_success_path_orders_have_correct_regions(sf_session, test_schema):
 # run_ingestion -- failure path
 # ---------------------------------------------------------------------------
 
+
 def test_fail_path_reraises(sf_session, test_schema):
     with pytest.raises(ValueError, match="Injected failure"):
         run_ingestion(sf_session, str(uuid.uuid4()), fail=True)
@@ -111,6 +113,7 @@ def test_fail_path_no_rows_in_orders(sf_session, test_schema):
 # get_kpis
 # ---------------------------------------------------------------------------
 
+
 def test_get_kpis_counts_both_statuses(sf_session, test_schema):
     # Ensure at least one success and one failure exist (may accumulate across tests)
     run_ingestion(sf_session, str(uuid.uuid4()), num_rows=5)
@@ -127,6 +130,7 @@ def test_get_kpis_counts_both_statuses(sf_session, test_schema):
 # ---------------------------------------------------------------------------
 # get_run_history
 # ---------------------------------------------------------------------------
+
 
 def test_get_run_history_sorted_most_recent_first(sf_session, test_schema):
     # Create two runs so we can check ordering

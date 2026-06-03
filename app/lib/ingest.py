@@ -119,10 +119,7 @@ def run_ingestion(
 def get_run_history(session: Session, limit: int = 100):
     """Return recent runs as a pandas DataFrame for display."""
     return (
-        session.table(_cfg.INGEST_LOG_TABLE)
-        .sort(col("STARTED_AT").desc())
-        .limit(limit)
-        .to_pandas()
+        session.table(_cfg.INGEST_LOG_TABLE).sort(col("STARTED_AT").desc()).limit(limit).to_pandas()
     )
 
 

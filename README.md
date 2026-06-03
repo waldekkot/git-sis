@@ -40,7 +40,9 @@ scripts/                  # shell runner scripts (--help / --version on all)
 tests/
   unit/                   # 13 tests, no Snowflake needed (CI)
   integration/            # 10 tests, real Snowflake (local only)
-.github/workflows/ci.yml  # runs unit tests + ruff on every push
+.pre-commit-config.yaml   # ruff lint+format, ty type check, pytest unit
+.github/workflows/ci.yml  # unit tests + ruff on every push; SiS redeploy on main
+docs/tutorial/            # interactive HTML tutorial (6 pages, animated SVGs)
 ```
 
 ## Shell runners (--help / --version on all)
@@ -107,6 +109,41 @@ git push
 snow sql -c oregon-sedemo -q "ALTER GIT REPOSITORY SNOWFLAKE_LEARNING_DB.GIT_SIS.APP_REPO FETCH"
 # then re-run section 3 of deploy/10_git_and_streamlit.sql (CREATE OR REPLACE + ADD LIVE VERSION)
 ```
+
+## Pre-commit Hooks
+
+Quality gates on every `git commit`: ruff lint + format, ty type check, unit tests.
+
+```bash
+# One-time setup (after uv sync)
+uv run pre-commit install
+
+# Run manually against all files
+uvx pre-commit run --all-files
+```
+
+Hooks run in order: `trailing-whitespace` → `ruff check --fix` → `ruff format` → `ty check app/lib/` → `pytest tests/unit/ -q`.
+Commits are blocked until all hooks pass. The ruff hook auto-fixes lint issues and re-stages them.
+
+## CI/CD
+
+GitHub Actions runs on every push and pull request:
+
+| Job | Trigger | What it does |
+|-----|---------|--------------|
+| `unit-tests` | push + PR | ruff lint + 13 unit tests (no Snowflake) |
+| `deploy-to-sis` | push to `main` only | Redeploys SiS app after unit-tests pass |
+
+### Setting up the `SF_PAT_TOKEN` secret (one-time)
+
+The SiS deploy job authenticates to Snowflake using a Programmatic Access Token.
+
+1. Read your PAT token value (local token file for `oregon-sedemo`)
+2. In your GitHub repo: **Settings → Secrets and variables → Actions → New repository secret**
+3. Name: `SF_PAT_TOKEN`, Value: the raw token string
+
+The CI connection targets `sfseeurope-wkot_demo1` as user `wkot` with `PROGRAMMATIC_ACCESS_TOKEN` auth.
+
 
 ## Cleanup (remove all demo objects)
 

@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>git-sis Tutorial — Deploy to SiS</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    /* ── Deploy loop animation ───────────────────────────────────── */
+    @keyframes step-light {
+      0%, 100% { fill: #161B22; }
+      50%       { fill: #11567F; }
+    }
+    @keyframes connector {
+      from { stroke-dashoffset: 60; }
+      to   { stroke-dashoffset: 0; }
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    @keyframes check-appear {
+      from { opacity: 0; transform: scale(0); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+
+    .svg-anim .step-1 { animation: step-light 1.2s ease .2s infinite; }
+    .svg-anim .step-2 { animation: step-light 1.2s ease .6s infinite; }
+    .svg-anim .step-3 { animation: step-light 1.2s ease 1.0s infinite; }
+    .svg-anim .step-4 { animation: step-light 1.2s ease 1.4s infinite; }
+
+    .svg-anim .conn-1 { stroke-dasharray: 60; stroke-dashoffset: 60; animation: connector .5s ease forwards .5s; }
+    .svg-anim .conn-2 { stroke-dasharray: 60; stroke-dashoffset: 60; animation: connector .5s ease forwards 1.0s; }
+    .svg-anim .conn-3 { stroke-dasharray: 60; stroke-dashoffset: 60; animation: connector .5s ease forwards 1.5s; }
+
+    .svg-anim .spinner {
+      transform-origin: 490px 92px;
+      animation: spin 1.5s linear 2s infinite;
+    }
+
+    .svg-anim .final-check { opacity: 0; animation: check-appear .4s ease forwards 3s; }
+  </style>
+</head>
+<body>
+
+<nav class="site-nav">
+  <a class="nav-logo" href="index.html">
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+      <path d="M11 2L3 6.5v9L11 20l8-4.5v-9L11 2z" fill="none" stroke="#29B5E8" stroke-width="1.5"/>
+      <circle cx="11" cy="11" r="3" fill="#29B5E8"/>
+    </svg>
+    git-sis
+  </a>
+  <span class="nav-chapter">Chapter 4 — Deploy to SiS</span>
+  <span class="nav-pill">5 / 6</span>
+</nav>
+<div class="progress-bar"><div class="progress-fill" style="width:80%"></div></div>
+
+<main>
+  <div class="hero">
+    <h1>Deploy to <span class="highlight">Streamlit-in-Snowflake</span></h1>
+    <p class="page-subtitle">Create the git-connected Streamlit app on container runtime. Three SQL statements, one shell command, zero file uploads.</p>
+  </div>
+
+  <!-- Deploy loop SVG -->
+  <div class="diagram-wrap reveal">
+    <svg class="svg-anim" viewBox="0 0 580 160" fill="none" xmlns="http://www.w3.org/2000/svg"
+         style="width:100%;max-width:580px" role="img" aria-label="Deploy loop: FETCH, CREATE STREAMLIT, ADD LIVE VERSION, Active">
+
+      <!-- Step 1: FETCH -->
+      <rect class="step-1" x="10" y="45" width="110" height="65" rx="8" stroke="#29B5E8" stroke-width="1.5"/>
+      <text x="65" y="72" text-anchor="middle" fill="#29B5E8" font-size="10" font-family="monospace" font-weight="700">ALTER GIT</text>
+      <text x="65" y="85" text-anchor="middle" fill="#29B5E8" font-size="10" font-family="monospace" font-weight="700">REPOSITORY</text>
+      <text x="65" y="98" text-anchor="middle" fill="#8B949E" font-size="9">FETCH</text>
+
+      <!-- Connector 1 -->
+      <path class="conn-1" d="M120 77 L150 77" stroke="#29B5E8" stroke-width="1.5" marker-end="url(#adep)"/>
+
+      <!-- Step 2: CREATE STREAMLIT -->
+      <rect class="step-2" x="150" y="40" width="130" height="75" rx="8" stroke="#29B5E8" stroke-width="1.5"/>
+      <text x="215" y="65" text-anchor="middle" fill="#29B5E8" font-size="10" font-family="monospace" font-weight="700">CREATE OR REPLACE</text>
+      <text x="215" y="78" text-anchor="middle" fill="#29B5E8" font-size="10" font-family="monospace" font-weight="700">STREAMLIT</text>
+      <text x="215" y="91" text-anchor="middle" fill="#8B949E" font-size="9">FROM @REPO/branches/main/app/</text>
+      <text x="215" y="104" text-anchor="middle" fill="#8B949E" font-size="8">container runtime</text>
+
+      <!-- Connector 2 -->
+      <path class="conn-2" d="M280 77 L310 77" stroke="#29B5E8" stroke-width="1.5" marker-end="url(#adep)"/>
+
+      <!-- Step 3: ADD LIVE VERSION -->
+      <rect class="step-3" x="310" y="45" width="130" height="65" rx="8" stroke="#29B5E8" stroke-width="1.5"/>
+      <text x="375" y="70" text-anchor="middle" fill="#29B5E8" font-size="10" font-family="monospace" font-weight="700">ALTER STREAMLIT</text>
+      <text x="375" y="83" text-anchor="middle" fill="#29B5E8" font-size="9" font-family="monospace">ADD LIVE VERSION</text>
+      <text x="375" y="96" text-anchor="middle" fill="#8B949E" font-size="9">FROM LAST</text>
+
+      <!-- Connector 3 -->
+      <path class="conn-3" d="M440 77 L470 77" stroke="#3FB950" stroke-width="1.5" marker-end="url(#adep3)"/>
+
+      <!-- Step 4: Active  -->
+      <rect class="step-4" x="470" y="50" width="100" height="55" rx="8" fill="#11567F" stroke="#3FB950" stroke-width="1.5"/>
+      <text x="520" y="75" text-anchor="middle" fill="#E6EDF3" font-size="22">❄️</text>
+      <text x="520" y="95" text-anchor="middle" fill="#3FB950" font-size="11" font-weight="700">Active</text>
+
+      <!-- Spinner on Active box (async container start) -->
+      <circle class="spinner" cx="490" cy="92" r="5" stroke="#29B5E8" stroke-width="1.5"
+              stroke-dasharray="20 10" fill="none"/>
+
+      <!-- Final check badge -->
+      <g class="final-check">
+        <circle cx="520" cy="53" r="10" fill="#3FB950"/>
+        <text x="520" y="58" text-anchor="middle" fill="white" font-size="12">✓</text>
+      </g>
+
+      <defs>
+        <marker id="adep"  markerWidth="7" markerHeight="7" refX="5" refY="2.5" orient="auto">
+          <path d="M0,0 L0,5 L7,2.5 z" fill="#29B5E8"/>
+        </marker>
+        <marker id="adep3" markerWidth="7" markerHeight="7" refX="5" refY="2.5" orient="auto">
+          <path d="M0,0 L0,5 L7,2.5 z" fill="#3FB950"/>
+        </marker>
+      </defs>
+    </svg>
+  </div>
+
+  <h2 class="reveal">First-time bootstrap</h2>
+
+  <div class="reveal">
+    <p>
+      Run <code>--bootstrap</code> once — it creates the API integration and GIT REPOSITORY,
+      then runs the deploy loop.
+    </p>
+    <div class="code-block">
+      <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
+      <pre>scripts/deploy.sh --bootstrap -c oregon-sedemo</pre>
+    </div>
+
+    <p>The bootstrap script runs:</p>
+    <ol class="steps">
+      <li><code>USE ROLE ACCOUNTADMIN</code> → create <code>git_api_waldekkot</code> API integration</li>
+      <li>Grant USAGE to SYSADMIN, create <code>APP_REPO</code> GIT REPOSITORY</li>
+      <li>Run the deploy loop (FETCH + CREATE STREAMLIT + ADD LIVE VERSION)</li>
+    </ol>
+
+    <div class="note">
+      <span class="note-icon">💡</span>
+      <div>
+        <strong>Container runtime requirements:</strong> <code>app/pyproject.toml</code> must exist in the app
+        source directory (not repo root), and <code>EXTERNAL_ACCESS_INTEGRATIONS = (PYPI_ACCESS_INTEGRATION)</code>
+        must be set in the CREATE STREAMLIT statement. Without either, the container startup fails.
+      </div>
+    </div>
+  </div>
+
+  <h2 class="reveal">The deploy SQL</h2>
+
+  <div class="reveal">
+    <div class="code-block">
+      <div class="code-block-header"><span>SQL — deploy/10_git_and_streamlit.sql (section 3)</span><button class="copy-btn">Copy</button></div>
+      <pre>-- Pull latest commit from GitHub
+ALTER GIT REPOSITORY SNOWFLAKE_LEARNING_DB.GIT_SIS.APP_REPO FETCH;
+
+-- Snapshot app/ dir from the cloned branch
+CREATE OR REPLACE STREAMLIT SNOWFLAKE_LEARNING_DB.GIT_SIS.INGEST_CONSOLE
+    FROM '@SNOWFLAKE_LEARNING_DB.GIT_SIS.APP_REPO/branches/main/app/'
+    MAIN_FILE         = 'streamlit_app.py'
+    QUERY_WAREHOUSE   = COMPUTE_WH
+    RUNTIME_NAME      = 'SYSTEM$ST_CONTAINER_RUNTIME_PY3_11'
+    COMPUTE_POOL      = SYSTEM_COMPUTE_POOL_CPU
+    EXTERNAL_ACCESS_INTEGRATIONS = (PYPI_ACCESS_INTEGRATION)
+    TITLE             = 'Ingestion Ops Console';
+
+-- Activate the app
+ALTER STREAMLIT SNOWFLAKE_LEARNING_DB.GIT_SIS.INGEST_CONSOLE
+    ADD LIVE VERSION FROM LAST;</pre>
+    </div>
+  </div>
+
+  <h2 class="reveal">Redeploy after a code change</h2>
+
+  <div class="reveal">
+    <p>Every subsequent deploy after a <code>git push</code> is just the three-step loop — no <code>--bootstrap</code>:</p>
+    <div class="code-block">
+      <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
+      <pre>git push && scripts/deploy.sh -c oregon-sedemo</pre>
+    </div>
+
+    <div class="tip">
+      <span class="note-icon">✅</span>
+      <div>
+        On push to <code>main</code>, GitHub Actions also runs this automatically —
+        see <a href="05-cicd.html">Chapter 5 (CI/CD)</a>.
+      </div>
+    </div>
+  </div>
+
+  <h2 class="reveal">Verify the deployment</h2>
+
+  <div class="reveal">
+    <div class="code-block">
+      <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
+      <pre># Get the app URL and open it
+scripts/verify.sh --open -c oregon-sedemo
+
+# Or just print the URL
+snow streamlit get-url -c oregon-sedemo \
+  SNOWFLAKE_LEARNING_DB.GIT_SIS.INGEST_CONSOLE</pre>
+    </div>
+
+    <div class="note">
+      <span class="note-icon">💡</span>
+      <div>
+        <strong><code>EXECUTE STREAMLIT</code> is not supported on container runtime</strong>
+        (only on warehouse runtime). Browser verification is the correct approach —
+        open the URL and confirm the app is Active with live KPI tiles.
+      </div>
+    </div>
+  </div>
+
+  <h2 class="reveal">Teardown (cleanup)</h2>
+
+  <div class="reveal">
+    <div class="code-block">
+      <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
+      <pre># Drop all objects (STREAMLIT, GIT REPOSITORY, SECRET, schema, API integration)
+snow sql -c oregon-sedemo -f deploy/99_cleanup.sql</pre>
+    </div>
+    <p>Cleanup is idempotent — safe to re-run. <code>PYPI_ACCESS_INTEGRATION</code> is a shared resource and is intentionally not dropped.</p>
+  </div>
+
+  <!-- Footer -->
+  <footer class="page-footer">
+    <a id="btn-prev" class="nav-btn" href="03-github.html">
+      ← <span><span class="nav-btn-label">Previous</span><span class="nav-btn-title">GitHub</span></span>
+    </a>
+    <span class="footer-center">Chapter 4 of 5</span>
+    <a id="btn-next" class="nav-btn primary" href="05-cicd.html">
+      <span><span class="nav-btn-label">Next</span><span class="nav-btn-title">CI/CD</span></span> →
+    </a>
+  </footer>
+</main>
+
+<script src="assets/main.js"></script>
+</body>
+</html>

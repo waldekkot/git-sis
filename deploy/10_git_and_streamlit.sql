@@ -56,12 +56,19 @@ ALTER GIT REPOSITORY SNOWFLAKE_LEARNING_DB.GIT_SIS.APP_REPO FETCH;
 
 -- Create the app FROM the git clone, container runtime. ROOT_LOCATION is NOT
 -- valid for container runtime -- FROM is required (and supports git integration).
+-- NOTE: the container runtime REQUIRES a dependency file (app/pyproject.toml) in
+-- the app source dir, and EXTERNAL_ACCESS_INTEGRATIONS with a PyPI EAI to resolve
+-- it. Without app/pyproject.toml the app fails to load:
+--   "Installing dependencies failed because the pyproject.toml file does not exist."
+-- Grant the PyPI EAI to SYSADMIN first (as ACCOUNTADMIN):
+--   GRANT USAGE ON INTEGRATION PYPI_ACCESS_INTEGRATION TO ROLE SYSADMIN;
 CREATE OR REPLACE STREAMLIT SNOWFLAKE_LEARNING_DB.GIT_SIS.INGEST_CONSOLE
     FROM '@SNOWFLAKE_LEARNING_DB.GIT_SIS.APP_REPO/branches/main/app/'
     MAIN_FILE = 'streamlit_app.py'
     QUERY_WAREHOUSE = COMPUTE_WH
     RUNTIME_NAME = 'SYSTEM$ST_CONTAINER_RUNTIME_PY3_11'
     COMPUTE_POOL = SYSTEM_COMPUTE_POOL_CPU
+    EXTERNAL_ACCESS_INTEGRATIONS = (PYPI_ACCESS_INTEGRATION)
     TITLE = 'Ingestion Ops Console';
 
 -- Make it live (required before headless EXECUTE STREAMLIT / first view).

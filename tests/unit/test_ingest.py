@@ -1,153 +1,206 @@
-"""Unit tests for lib.ingest -- all Snowflake calls are mocked.
+"""Unit tests for lib.ingest using Snowflake's local testing framework.
 
-Design notes:
-- session.sql() and session.table().update() don't work in local_testing mode,
-  so we use MagicMock() for the session in orchestration tests.
-- _synthetic_orders builds a Snowpark lazy plan that calls call_function("UUID_STRING")
-  which can't execute in local_testing. It is covered in integration tests.
-  Here we only verify the function is importable and returns a DF-like object
-  via a mock session.
+Uses Session.builder.config("local_testing", True) for an in-process Snowflake
+emulator — no credentials, no network, no Snowflake account required.
+
+Ref: https://docs.snowflake.com/en/developer-guide/snowpark/python/testing-locally
+
+Key patterns applied:
+- session.sql() is NOT supported in local testing; ingest.py was refactored to
+  use the DataFrame API exclusively so tests run unmodified.
+- call_function("UUID_STRING") is not implemented in the local emulator — we
+  patch lib.ingest.call_function so it returns lit(<uuid>) per call.
+- Each test gets a fresh session (function scope) for full isolation.
+- Tables are pre-created with the correct schema via the `tables` fixture so
+  _log_start (append) and _log_finish (update) have a table to work with.
 """
 
 from __future__ import annotations
 
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch as mock_patch
 
 import pandas as pd
 import pytest
-from lib.ingest import PROC_NAME, get_kpis, get_run_history, run_ingestion
-from snowflake.snowpark.functions import lit as real_lit
+from lib import config as _cfg
+from lib.ingest import PROC_NAME, _synthetic_orders, get_kpis, get_run_history, run_ingestion
+from snowflake.snowpark import Session
+from snowflake.snowpark.functions import col, lit
+from snowflake.snowpark.types import (
+    FloatType,
+    LongType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
+)
 
 # ---------------------------------------------------------------------------
-# Shared fixture
+# Fixtures
 # ---------------------------------------------------------------------------
 
-
-@pytest.fixture
-def mock_session():
-    """A MagicMock that satisfies the Snowpark Session interface used by ingest.py."""
-    sess = MagicMock()
-    # session.sql(...).collect() -> []
-    sess.sql.return_value.collect.return_value = []
-    # session.table(...).update(...) -> MagicMock()
-    # session.table(...).sort(...).limit(...).to_pandas() -> empty DataFrame
-    sess.table.return_value.sort.return_value.limit.return_value.to_pandas.return_value = (
-        pd.DataFrame()
-    )
-    return sess
-
-
-# ---------------------------------------------------------------------------
-# run_ingestion -- success path
-# ---------------------------------------------------------------------------
-
-
-def test_run_ingestion_success_returns_summary(mock_session):
-    run_id = str(uuid.uuid4())
-    with patch("lib.ingest._synthetic_orders", return_value=MagicMock()):
-        result = run_ingestion(mock_session, run_id, num_rows=42)
-
-    assert result["run_id"] == run_id
-    assert result["status"] == "SUCCESS"
-    assert result["rows_loaded"] == 42
-
-
-def test_run_ingestion_success_calls_save_as_table(mock_session):
-    with patch("lib.ingest._synthetic_orders") as mock_builder:
-        mock_df = MagicMock()
-        mock_builder.return_value = mock_df
-        run_ingestion(mock_session, str(uuid.uuid4()), num_rows=10)
-
-    mock_df.write.mode.assert_called_once_with("append")
-    mock_df.write.mode.return_value.save_as_table.assert_called_once()
-
-
-def test_run_ingestion_success_logs_running_then_success(mock_session):
-    run_id = str(uuid.uuid4())
-    # Spy on lib.ingest.lit to capture the plain values passed to Column wrappers.
-    with (
-        patch("lib.ingest._synthetic_orders", return_value=MagicMock()),
-        patch("lib.ingest.lit", wraps=real_lit) as mock_lit,
-    ):
-        run_ingestion(mock_session, run_id, num_rows=10)
-
-    # _log_start: session.sql called with run_id and PROC_NAME as params
-    first_sql_call = mock_session.sql.call_args_list[0]
-    params = first_sql_call[1].get("params") or (
-        first_sql_call[0][1] if len(first_sql_call[0]) > 1 else []
-    )
-    assert run_id in params
-    assert PROC_NAME in params
-
-    # _log_finish(SUCCESS): lit("SUCCESS") was called
-    lit_values = [c.args[0] for c in mock_lit.call_args_list if c.args]
-    assert "SUCCESS" in lit_values
-
-
-# ---------------------------------------------------------------------------
-# run_ingestion -- failure path
-# ---------------------------------------------------------------------------
-
-
-def test_run_ingestion_fail_reraises(mock_session):
-    with pytest.raises(ValueError, match="Injected failure"):
-        run_ingestion(mock_session, str(uuid.uuid4()), fail=True)
-
-
-def test_run_ingestion_fail_logs_failed_status(mock_session):
-    run_id = str(uuid.uuid4())
-    with patch("lib.ingest.lit", wraps=real_lit) as mock_lit:
-        with pytest.raises(ValueError):
-            run_ingestion(mock_session, run_id, fail=True)
-
-    lit_values = [c.args[0] for c in mock_lit.call_args_list if c.args]
-    assert "FAILED" in lit_values
-
-
-def test_run_ingestion_fail_error_message_captured(mock_session):
-    run_id = str(uuid.uuid4())
-    with patch("lib.ingest.lit", wraps=real_lit) as mock_lit:
-        with pytest.raises(ValueError):
-            run_ingestion(mock_session, run_id, fail=True)
-
-    # lit(error_msg) is called with the error message string
-    lit_str_values = [
-        c.args[0] for c in mock_lit.call_args_list if c.args and isinstance(c.args[0], str)
+_ORDERS_SCHEMA = StructType(
+    [
+        StructField("ORDER_ID", StringType()),
+        StructField("RUN_ID", StringType()),
+        StructField("CUSTOMER_ID", LongType()),
+        StructField("AMOUNT", FloatType()),
+        StructField("REGION", StringType()),
+        StructField("ORDER_TS", TimestampType()),
     ]
-    assert any("Injected failure" in v for v in lit_str_values)
+)
+
+_LOG_SCHEMA = StructType(
+    [
+        StructField("RUN_ID", StringType()),
+        StructField("PROC_NAME", StringType()),
+        StructField("STATUS", StringType()),
+        StructField("ROWS_LOADED", LongType()),
+        StructField("ERROR_CODE", StringType()),
+        StructField("ERROR_MSG", StringType()),
+        StructField("STARTED_AT", TimestampType()),
+        StructField("ENDED_AT", TimestampType()),
+    ]
+)
+
+
+@pytest.fixture()
+def session():
+    """Fresh in-process Snowflake emulator session per test — no credentials needed.
+
+    Per Snowflake docs, use Session.builder.config("local_testing", True).create()
+    to get a session backed by the local testing framework.
+    """
+    sess = Session.builder.config("local_testing", True).create()
+    # Pre-create empty tables so _log_finish (update) and read helpers can find them
+    sess.create_dataframe([], _ORDERS_SCHEMA).write.save_as_table(_cfg.ORDERS_TABLE)
+    sess.create_dataframe([], _LOG_SCHEMA).write.save_as_table(_cfg.INGEST_LOG_TABLE)
+    yield sess
+    sess.close()
+
+
+def _uuid_patch():
+    """Patch context: replaces call_function('UUID_STRING') with lit(<uuid>).
+
+    UUID_STRING is a Snowflake built-in that is not implemented in the local
+    testing emulator.  We return a Column literal so the DataFrame plan is valid
+    (rows get unique IDs only when lit is called per select; acceptable for tests).
+    """
+    return mock_patch(
+        "lib.ingest.call_function",
+        side_effect=lambda name: lit(str(uuid.uuid4())),
+    )
 
 
 # ---------------------------------------------------------------------------
-# get_kpis
+# run_ingestion — success path: verify data flow end-to-end
 # ---------------------------------------------------------------------------
 
 
-def test_get_kpis_returns_all_keys(mock_session):
-    row = MagicMock()
-    row.__getitem__.side_effect = {
-        "TOTAL_RUNS": 5,
-        "FAILED_RUNS": 2,
-        "SUCCESS_RUNS": 3,
-        "ROWS_LOADED": 1500,
-    }.__getitem__
-    mock_session.sql.return_value.collect.return_value = [row]
+def test_run_ingestion_success_returns_summary(session):
+    run_id = str(uuid.uuid4())
+    with _uuid_patch():
+        result = run_ingestion(session, run_id, num_rows=5)
 
-    kpis = get_kpis(mock_session)
-    assert set(kpis.keys()) == {"total_runs", "failed_runs", "success_runs", "rows_loaded"}
+    assert result == {"run_id": run_id, "status": "SUCCESS", "rows_loaded": 5}
 
 
-def test_get_kpis_values_match_row(mock_session):
-    row = MagicMock()
-    data = {"TOTAL_RUNS": 7, "FAILED_RUNS": 3, "SUCCESS_RUNS": 4, "ROWS_LOADED": 2000}
-    row.__getitem__.side_effect = data.__getitem__
-    mock_session.sql.return_value.collect.return_value = [row]
+def test_run_ingestion_success_lands_rows_in_orders(session):
+    """Rows are written to ORDERS with the correct RUN_ID stamp."""
+    run_id = str(uuid.uuid4())
+    with _uuid_patch():
+        run_ingestion(session, run_id, num_rows=7)
 
-    kpis = get_kpis(mock_session)
-    assert kpis["total_runs"] == 7
-    assert kpis["failed_runs"] == 3
-    assert kpis["success_runs"] == 4
-    assert kpis["rows_loaded"] == 2000
+    rows = session.table(_cfg.ORDERS_TABLE).filter(col("RUN_ID") == lit(run_id)).collect()
+    assert len(rows) == 7
+
+
+def test_run_ingestion_success_writes_success_log(session):
+    """INGEST_LOG shows STATUS=SUCCESS and correct ROWS_LOADED."""
+    run_id = str(uuid.uuid4())
+    with _uuid_patch():
+        run_ingestion(session, run_id, num_rows=3)
+
+    log = session.table(_cfg.INGEST_LOG_TABLE).filter(col("RUN_ID") == lit(run_id)).collect()
+    assert len(log) == 1
+    assert log[0]["STATUS"] == "SUCCESS"
+    assert log[0]["ROWS_LOADED"] == 3
+    assert log[0]["PROC_NAME"] == PROC_NAME
+
+
+def test_run_ingestion_success_orders_have_valid_regions(session):
+    """REGION column contains only the four expected values."""
+    run_id = str(uuid.uuid4())
+    with _uuid_patch():
+        run_ingestion(session, run_id, num_rows=40)
+
+    rows = session.table(_cfg.ORDERS_TABLE).filter(col("RUN_ID") == lit(run_id)).collect()
+    regions = {r["REGION"] for r in rows}
+    assert regions <= {"US", "EU", "APAC", "LATAM"}
+
+
+# ---------------------------------------------------------------------------
+# run_ingestion — failure path
+# ---------------------------------------------------------------------------
+
+
+def test_run_ingestion_fail_reraises(session):
+    with pytest.raises(ValueError, match="Injected failure"):
+        run_ingestion(session, str(uuid.uuid4()), fail=True)
+
+
+def test_run_ingestion_fail_writes_failed_log(session):
+    """FAILED run creates a log entry with STATUS=FAILED and captured error message."""
+    run_id = str(uuid.uuid4())
+    with pytest.raises(ValueError):
+        run_ingestion(session, run_id, fail=True)
+
+    log = session.table(_cfg.INGEST_LOG_TABLE).filter(col("RUN_ID") == lit(run_id)).collect()
+    assert len(log) == 1
+    assert log[0]["STATUS"] == "FAILED"
+    assert "Injected failure" in (log[0]["ERROR_MSG"] or "")
+
+
+def test_run_ingestion_fail_no_rows_in_orders(session):
+    """A failed run must not write any rows to ORDERS."""
+    run_id = str(uuid.uuid4())
+    with pytest.raises(ValueError):
+        run_ingestion(session, run_id, fail=True)
+
+    count = session.table(_cfg.ORDERS_TABLE).filter(col("RUN_ID") == lit(run_id)).count()
+    assert count == 0
+
+
+# ---------------------------------------------------------------------------
+# _synthetic_orders — DataFrame plan: verify structure and content
+# ---------------------------------------------------------------------------
+
+
+def test_synthetic_orders_produces_correct_row_count(session):
+    """_synthetic_orders yields exactly num_rows rows when collected."""
+    run_id = str(uuid.uuid4())
+    with _uuid_patch():
+        df = _synthetic_orders(session, run_id, num_rows=4)
+        rows = df.collect()
+    assert len(rows) == 4
+
+
+def test_synthetic_orders_stamps_run_id(session):
+    """Every generated row carries the correct RUN_ID value."""
+    run_id = str(uuid.uuid4())
+    with _uuid_patch():
+        rows = _synthetic_orders(session, run_id, num_rows=3).collect()
+    assert all(r["RUN_ID"] == run_id for r in rows)
+
+
+def test_synthetic_orders_regions_from_expected_set(session):
+    """REGION is always one of US / EU / APAC / LATAM (no nulls, no typos)."""
+    run_id = str(uuid.uuid4())
+    with _uuid_patch():
+        rows = _synthetic_orders(session, run_id, num_rows=40).collect()
+    regions = {r["REGION"] for r in rows}
+    assert regions <= {"US", "EU", "APAC", "LATAM"}
+    assert len(regions) > 1, "Expected multiple distinct regions across 40 rows"
 
 
 # ---------------------------------------------------------------------------
@@ -155,16 +208,58 @@ def test_get_kpis_values_match_row(mock_session):
 # ---------------------------------------------------------------------------
 
 
-def test_get_run_history_returns_dataframe(mock_session):
-    expected = pd.DataFrame({"STATUS": ["SUCCESS", "FAILED"], "RUN_ID": ["r1", "r2"]})
-    mock_session.table.return_value.sort.return_value.limit.return_value.to_pandas.return_value = (
-        expected
-    )
-    result = get_run_history(mock_session, limit=5)
-    assert list(result.columns) == ["STATUS", "RUN_ID"]
-    assert len(result) == 2
+def test_get_run_history_returns_empty_dataframe_before_any_runs(session):
+    """Before any ingestion, get_run_history returns an empty DataFrame."""
+    result = get_run_history(session, limit=10)
+    assert isinstance(result, pd.DataFrame)
+    assert len(result) == 0
 
 
-def test_get_run_history_passes_limit(mock_session):
-    get_run_history(mock_session, limit=25)
-    mock_session.table.return_value.sort.return_value.limit.assert_called_once_with(25)
+def test_get_run_history_shows_completed_run(session):
+    """A completed run appears in the history with the correct RUN_ID."""
+    run_id = str(uuid.uuid4())
+    with _uuid_patch():
+        run_ingestion(session, run_id, num_rows=2)
+
+    history = get_run_history(session, limit=5)
+    assert run_id in history["RUN_ID"].values
+
+
+def test_get_run_history_respects_limit(session):
+    """Only 'limit' most-recent rows are returned."""
+    with _uuid_patch():
+        for _ in range(5):
+            run_ingestion(session, str(uuid.uuid4()), num_rows=1)
+
+    history = get_run_history(session, limit=3)
+    assert len(history) == 3
+
+
+# ---------------------------------------------------------------------------
+# get_kpis
+# ---------------------------------------------------------------------------
+
+
+def test_get_kpis_returns_all_keys(session):
+    kpis = get_kpis(session)
+    assert set(kpis.keys()) == {"total_runs", "failed_runs", "success_runs", "rows_loaded"}
+
+
+def test_get_kpis_zero_before_any_runs(session):
+    kpis = get_kpis(session)
+    assert kpis["total_runs"] == 0
+    assert kpis["rows_loaded"] == 0
+
+
+def test_get_kpis_counts_both_statuses(session):
+    """Two runs (one success, one fail) are reflected accurately in KPIs."""
+    with _uuid_patch():
+        run_ingestion(session, str(uuid.uuid4()), num_rows=10)
+    with pytest.raises(ValueError):
+        run_ingestion(session, str(uuid.uuid4()), fail=True)
+
+    kpis = get_kpis(session)
+    assert kpis["total_runs"] == 2
+    assert kpis["success_runs"] == 1
+    assert kpis["failed_runs"] == 1
+    assert kpis["rows_loaded"] == 10

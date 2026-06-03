@@ -9,9 +9,16 @@ Pattern (mirrors a production ingestion stored procedure):
 
 The same function runs unchanged locally and inside SiS because it only touches
 the Snowpark `session` it is handed.
+
+Local-testing compatibility (https://docs.snowflake.com/en/developer-guide/snowpark/python/testing-locally):
+  session.sql() is not supported in local testing.  All operations here use
+  the DataFrame API so unit tests can run fully in-process with
+  Session.builder.config("local_testing", True).create().
 """
 
 from __future__ import annotations
+
+import datetime
 
 from snowflake.snowpark import Session
 from snowflake.snowpark.functions import (
@@ -26,20 +33,57 @@ from snowflake.snowpark.functions import (
 from snowflake.snowpark.functions import (
     round as sf_round,
 )
+from snowflake.snowpark.functions import (
+    sum as sf_sum,
+)
+from snowflake.snowpark.types import (
+    LongType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
+)
 
 from lib import config as _cfg  # module reference so test reloads propagate
 
 PROC_NAME = "LOAD_SYNTHETIC_ORDERS"
 
+# Schema for INGEST_LOG -- used when appending new log rows via DataFrame API.
+_LOG_SCHEMA = StructType(
+    [
+        StructField("RUN_ID", StringType()),
+        StructField("PROC_NAME", StringType()),
+        StructField("STATUS", StringType()),
+        StructField("ROWS_LOADED", LongType()),
+        StructField("ERROR_CODE", StringType()),
+        StructField("ERROR_MSG", StringType()),
+        StructField("STARTED_AT", TimestampType()),
+        StructField("ENDED_AT", TimestampType()),
+    ]
+)
+
 
 def _log_start(session: Session, run_id: str) -> None:
-    """Insert a RUNNING row. Parameterized -- never interpolate run_id into SQL."""
-    session.sql(
-        f"INSERT INTO {_cfg.INGEST_LOG_TABLE} "
-        "(RUN_ID, PROC_NAME, STATUS, STARTED_AT) "
-        "SELECT ?, ?, 'RUNNING', CURRENT_TIMESTAMP()",
-        params=[run_id, PROC_NAME],
-    ).collect()
+    """Insert a RUNNING row via DataFrame API.
+
+    session.sql(INSERT ...) is not supported in the local testing emulator,
+    so we use create_dataframe().write.save_as_table() instead.
+    """
+    session.create_dataframe(
+        [
+            [
+                run_id,
+                PROC_NAME,
+                "RUNNING",
+                None,
+                None,
+                None,
+                datetime.datetime.now(datetime.UTC),
+                None,
+            ]
+        ],
+        schema=_LOG_SCHEMA,
+    ).write.mode("append").save_as_table(_cfg.INGEST_LOG_TABLE)
 
 
 def _log_finish(
@@ -124,20 +168,24 @@ def get_run_history(session: Session, limit: int = 100):
 
 
 def get_kpis(session: Session) -> dict:
-    """Return headline KPIs computed in Snowflake."""
-    row = session.sql(
-        f"""
-        SELECT
-            COUNT(*)                                          AS TOTAL_RUNS,
-            COUNT_IF(STATUS = 'FAILED')                       AS FAILED_RUNS,
-            COUNT_IF(STATUS = 'SUCCESS')                      AS SUCCESS_RUNS,
-            COALESCE(SUM(IFF(STATUS = 'SUCCESS', ROWS_LOADED, 0)), 0) AS ROWS_LOADED
-        FROM {_cfg.INGEST_LOG_TABLE}
-        """
-    ).collect()[0]
+    """Return headline KPIs using the DataFrame API (compatible with local testing).
+
+    Uses separate filter().count() calls rather than a single SQL aggregate so
+    that Session.sql() (unsupported in local testing) is not needed.
+    """
+    df = session.table(_cfg.INGEST_LOG_TABLE)
+    total = df.count()
+    failed = df.filter(col("STATUS") == lit("FAILED")).count()
+    success = df.filter(col("STATUS") == lit("SUCCESS")).count()
+    rows_data = (
+        df.filter(col("STATUS") == lit("SUCCESS"))
+        .agg(sf_sum(col("ROWS_LOADED")).alias("TOTAL"))
+        .collect()
+    )
+    rows_loaded = int(rows_data[0]["TOTAL"] or 0) if rows_data and rows_data[0]["TOTAL"] else 0
     return {
-        "total_runs": row["TOTAL_RUNS"],
-        "failed_runs": row["FAILED_RUNS"],
-        "success_runs": row["SUCCESS_RUNS"],
-        "rows_loaded": row["ROWS_LOADED"],
+        "total_runs": total,
+        "failed_runs": failed,
+        "success_runs": success,
+        "rows_loaded": rows_loaded,
     }

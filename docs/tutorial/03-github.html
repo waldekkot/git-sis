@@ -157,12 +157,26 @@ git push -u origin main</pre>
   <h2 class="reveal">3. Store the PAT as a Snowflake SECRET</h2>
 
   <div class="reveal">
+    <p>
+      The PAT lives in <strong><code>GIT_SIS_INFRA.SECRETS.GITHUB_PAT</code></strong> — a separate
+      database from the demo schema. This means it <strong>survives <code>99_cleanup.sql</code></strong>
+      resets. You create it once and never need to re-enter it.
+    </p>
+
+    <h3>First: create the infra database (one-time, idempotent)</h3>
+    <div class="code-block">
+      <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
+      <pre>snow sql -c oregon-sedemo -f deploy/01_setup_infra.sql
+# Expected: "Infra setup complete"</pre>
+    </div>
+
+    <h3>Then: create the secret (once ever)</h3>
     <p>Run this from your local terminal — <strong>not</strong> in Snowsight (to ensure you're hitting the correct account):</p>
     <div class="code-block">
       <div class="code-block-header"><span>bash — run in your terminal</span><button class="copy-btn">Copy</button></div>
       <pre>snow sql -c oregon-sedemo -q "
-CREATE OR REPLACE SECRET SNOWFLAKE_LEARNING_DB.GIT_SIS.GITHUB_PAT
-    TYPE = password
+CREATE OR REPLACE SECRET GIT_SIS_INFRA.SECRETS.GITHUB_PAT
+    TYPE = PASSWORD
     USERNAME = 'waldekkot'
     PASSWORD = '&lt;your-classic-github-pat&gt;';
 "</pre>
@@ -172,7 +186,7 @@ CREATE OR REPLACE SECRET SNOWFLAKE_LEARNING_DB.GIT_SIS.GITHUB_PAT
     <div class="code-block">
       <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
       <pre>snow sql -c oregon-sedemo -q \
-  "SHOW SECRETS IN SCHEMA SNOWFLAKE_LEARNING_DB.GIT_SIS" \
+  "SHOW SECRETS IN SCHEMA GIT_SIS_INFRA.SECRETS" \
   | grep GITHUB_PAT</pre>
     </div>
 
@@ -203,14 +217,14 @@ scripts/deploy.sh --bootstrap -c oregon-sedemo</pre>
 CREATE API INTEGRATION IF NOT EXISTS git_api_waldekkot
     API_PROVIDER           = git_https_api
     API_ALLOWED_PREFIXES   = ('https://github.com/waldekkot')
-    ALLOWED_AUTHENTICATION_SECRETS = (SNOWFLAKE_LEARNING_DB.GIT_SIS.GITHUB_PAT)
+    ALLOWED_AUTHENTICATION_SECRETS = (GIT_SIS_INFRA.SECRETS.GITHUB_PAT)
     ENABLED                = TRUE;
 GRANT USAGE ON INTEGRATION git_api_waldekkot TO ROLE SYSADMIN;
 
 USE ROLE SYSADMIN;
 CREATE GIT REPOSITORY IF NOT EXISTS SNOWFLAKE_LEARNING_DB.GIT_SIS.APP_REPO
     API_INTEGRATION  = git_api_waldekkot
-    GIT_CREDENTIALS  = SNOWFLAKE_LEARNING_DB.GIT_SIS.GITHUB_PAT
+    GIT_CREDENTIALS  = GIT_SIS_INFRA.SECRETS.GITHUB_PAT
     ORIGIN           = 'https://github.com/waldekkot/git-sis';
 
 -- Verify clone succeeded

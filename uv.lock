@@ -508,24 +508,26 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "snowflake-snowpark-python", extra = ["localtest"] },
     { name = "ty" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "pandas", specifier = ">=2.0" },
-    { name = "snowflake-connector-python", specifier = ">=3.12" },
-    { name = "snowflake-snowpark-python", specifier = ">=1.20" },
-    { name = "streamlit", specifier = ">=1.40" },
+    { name = "pandas", specifier = ">=2.2" },
+    { name = "snowflake-connector-python", specifier = ">=3.13" },
+    { name = "snowflake-snowpark-python", specifier = ">=1.21" },
+    { name = "streamlit", specifier = ">=1.45" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "pre-commit", specifier = ">=4.0" },
-    { name = "pytest", specifier = ">=8.0" },
-    { name = "pytest-cov", specifier = ">=5.0" },
-    { name = "ruff", specifier = ">=0.6" },
-    { name = "ty", specifier = ">=0.0.1" },
+    { name = "pytest", specifier = ">=8.3" },
+    { name = "pytest-cov", specifier = ">=6.0" },
+    { name = "ruff", specifier = ">=0.15" },
+    { name = "snowflake-snowpark-python", extras = ["localtest"], specifier = ">=1.21" },
+    { name = "ty", specifier = ">=0.0.42" },
 ]
 
 [[package]]
@@ -1590,6 +1592,12 @@ dependencies = [
 sdist = { url = "http://mirror-pypi-de.runflare.com/packages/79/56/7e746286afe2c92247f7ee00f0408c3f0c281c1ba53e3fd09ce48afdb7be/snowflake_snowpark_python-1.51.1.tar.gz", hash = "sha256:734bf5e89a6193472aa369192b61e082ae36304bbf07b2050228abb887ac2649" }
 wheels = [
     { url = "http://mirror-pypi-de.runflare.com/packages/97/24/e0c396986054d9a6e44fece81a2f4a3cea0e651658b03485c12ee2689fd5/snowflake_snowpark_python-1.51.1-py3-none-any.whl", hash = "sha256:e4435d5201b5864287bcdfd4380e6517436505e3a8cb30cc69126c33fcba2209" },
+]
+
+[package.optional-dependencies]
+localtest = [
+    { name = "pandas" },
+    { name = "requests" },
 ]
 
 [[package]]

@@ -7,24 +7,25 @@
 -- Run order matters. Sections 1-2 are a ONE-TIME bootstrap (idempotent).
 -- Section 3 is the (re)deploy loop -- safe to re-run after every git push.
 --
--- IMPORTANT: never commit a real PAT. The secret below uses a placeholder;
--- create it once out-of-band with the real token, e.g.:
---   snow sql -c oregon-sedemo -q "CREATE SECRET IF NOT EXISTS \
---     SNOWFLAKE_LEARNING_DB.GIT_SIS.GITHUB_PAT TYPE=PASSWORD \
---     USERNAME='waldekkot' PASSWORD='<REAL_PAT>'"
+-- IMPORTANT: The GitHub PAT lives in GIT_SIS_INFRA.SECRETS.GITHUB_PAT --
+-- a separate database that survives 99_cleanup.sql resets.
+-- Run deploy/01_setup_infra.sql once to create the DB+schema, then create
+-- the secret out-of-band (value never stored in git -- see section 1 below).
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
--- 1. Secret with the GitHub PAT (SYSADMIN owns the schema -> can create).
---    One-time bootstrap. Replace the placeholder OR create out-of-band (above).
+-- 1. Secret with the GitHub PAT -- lives in GIT_SIS_INFRA.SECRETS so it
+--    survives 99_cleanup.sql.  Create it out-of-band (see IMPORTANT note above
+--    or run deploy/01_setup_infra.sql first, then create the secret).
 -- ---------------------------------------------------------------------
-USE ROLE SYSADMIN;
-USE SCHEMA SNOWFLAKE_LEARNING_DB.GIT_SIS;
-
-CREATE SECRET IF NOT EXISTS SNOWFLAKE_LEARNING_DB.GIT_SIS.GITHUB_PAT
-    TYPE = PASSWORD
-    USERNAME = 'waldekkot'
-    PASSWORD = '<<PUT_GITHUB_PAT_HERE>>';   -- fine-grained PAT, Contents:read
+-- PREREQUISITE: run 01_setup_infra.sql first, then create the secret:
+--   snow sql -c oregon-sedemo -q "
+--     CREATE OR REPLACE SECRET GIT_SIS_INFRA.SECRETS.GITHUB_PAT
+--         TYPE = PASSWORD
+--         USERNAME = 'waldekkot'
+--         PASSWORD = '<your-classic-github-pat>';"
+--
+-- The secret is NOT recreated here -- it lives permanently in GIT_SIS_INFRA.
 
 -- ---------------------------------------------------------------------
 -- 2. API integration for github.com/waldekkot (needs ACCOUNTADMIN).
@@ -35,7 +36,7 @@ USE ROLE ACCOUNTADMIN;
 CREATE API INTEGRATION IF NOT EXISTS git_api_waldekkot
     API_PROVIDER = git_https_api
     API_ALLOWED_PREFIXES = ('https://github.com/waldekkot')
-    ALLOWED_AUTHENTICATION_SECRETS = (SNOWFLAKE_LEARNING_DB.GIT_SIS.GITHUB_PAT)
+    ALLOWED_AUTHENTICATION_SECRETS = (GIT_SIS_INFRA.SECRETS.GITHUB_PAT)
     ENABLED = TRUE;
 
 GRANT USAGE ON INTEGRATION git_api_waldekkot TO ROLE SYSADMIN;
@@ -48,7 +49,7 @@ USE SCHEMA SNOWFLAKE_LEARNING_DB.GIT_SIS;
 
 CREATE GIT REPOSITORY IF NOT EXISTS SNOWFLAKE_LEARNING_DB.GIT_SIS.APP_REPO
     API_INTEGRATION = git_api_waldekkot
-    GIT_CREDENTIALS = SNOWFLAKE_LEARNING_DB.GIT_SIS.GITHUB_PAT
+    GIT_CREDENTIALS = GIT_SIS_INFRA.SECRETS.GITHUB_PAT
     ORIGIN = 'https://github.com/waldekkot/git-sis';
 
 -- Pull the latest commit(s) into the clone (FROM snapshots at CREATE time).

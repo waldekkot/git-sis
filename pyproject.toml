@@ -4,24 +4,25 @@ version = "0.1.0"
 description = "Git-connected Streamlit-in-Snowflake ingestion ops console (Streamlit + Snowpark)"
 requires-python = ">=3.11"
 dependencies = [
-    "streamlit>=1.40",
-    "snowflake-snowpark-python>=1.20",
-    "snowflake-connector-python>=3.12",
-    "pandas>=2.0",
+    "streamlit>=1.45",
+    "snowflake-snowpark-python>=1.21",
+    "snowflake-connector-python>=3.13",
+    "pandas>=2.2",
 ]
 
 [dependency-groups]
 dev = [
-    "ruff>=0.6",
-    "pytest>=8.0",
-    "pytest-cov>=5.0",
-    "ty>=0.0.1",
+    "snowflake-snowpark-python[localtest]>=1.21",
+    "ruff>=0.15",
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "ty>=0.0.42",
     "pre-commit>=4.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=80"
 # Integration tests require a live Snowflake connection; skip them unless opted-in.
 # Run them with: uv run pytest tests/integration/ -v
 markers = [

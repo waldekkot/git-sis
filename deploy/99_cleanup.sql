@@ -1,14 +1,17 @@
 -- =====================================================================
--- 99_cleanup.sql  -- tear down ALL objects created by this demo
+-- 99_cleanup.sql  -- reset the demo (keeps the GitHub PAT secret)
 -- =====================================================================
 -- Drops everything in dependency order (children first, then parents).
 -- Idempotent: IF EXISTS on every statement -- safe to re-run.
 --
+-- Cleanup levels:
+--   99_cleanup.sql (this)  -- resets demo state; PAT secret survives
+--   98_cleanup_infra.sql   -- FULL teardown including GIT_SIS_INFRA DB
+--
 -- Run:
 --   snow sql -c oregon-sedemo -f deploy/99_cleanup.sql
 --
--- WARNING: This is destructive and irreversible.  Only run it when you
--- are done with the demo.  It will DELETE all data in GIT_SIS.
+-- WARNING: This is destructive and irreversible for GIT_SIS data.
 -- =====================================================================
 
 -- -----------------------------------------------------------------
@@ -22,8 +25,9 @@ DROP STREAMLIT IF EXISTS SNOWFLAKE_LEARNING_DB.GIT_SIS.INGEST_CONSOLE;
 -- Git repository clone (also releases the external git connection)
 DROP GIT REPOSITORY IF EXISTS SNOWFLAKE_LEARNING_DB.GIT_SIS.APP_REPO;
 
--- GitHub PAT secret
-DROP SECRET IF EXISTS SNOWFLAKE_LEARNING_DB.GIT_SIS.GITHUB_PAT;
+-- NOTE: GITHUB_PAT is NOT dropped here -- it lives in a separate database
+-- (GIT_SIS_INFRA.SECRETS.GITHUB_PAT) so it survives demo resets.
+-- To also drop the credential, run: deploy/98_cleanup_infra.sql
 
 -- Tables + the schema itself (CASCADE drops ORDERS, INGEST_LOG, and anything else)
 DROP SCHEMA IF EXISTS SNOWFLAKE_LEARNING_DB.GIT_SIS CASCADE;

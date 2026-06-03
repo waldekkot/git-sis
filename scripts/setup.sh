@@ -17,8 +17,12 @@ show_help() {
     cat <<EOF
 git-sis $VERSION -- setup
 
-Creates the SNOWFLAKE_LEARNING_DB.GIT_SIS schema, ORDERS table, and
-INGEST_LOG table using deploy/00_setup_env.sql.
+Creates the GIT_SIS_INFRA database (permanent credential store) and
+the SNOWFLAKE_LEARNING_DB.GIT_SIS schema, ORDERS table, and
+INGEST_LOG table.
+
+The infra database holds the GitHub PAT secret and is NOT dropped by
+99_cleanup.sql -- only by 98_cleanup_infra.sql.
 
 USAGE
     $(basename "$0") [OPTIONS]
@@ -45,6 +49,8 @@ set -- "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
+info "Setting up infra database (connection: $CONN) ..."
+snow sql -c "$CONN" -f "$ROOT_DIR/deploy/01_setup_infra.sql"
 info "Setting up Snowflake environment (connection: $CONN) ..."
 snow sql -c "$CONN" -f "$ROOT_DIR/deploy/00_setup_env.sql"
-success "Schema and tables created."
+success "Infra + schema and tables created."

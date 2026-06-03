@@ -77,13 +77,13 @@ if [[ "$BOOTSTRAP" == true ]]; then
         CREATE API INTEGRATION IF NOT EXISTS git_api_waldekkot
             API_PROVIDER = git_https_api
             API_ALLOWED_PREFIXES = ('https://github.com/waldekkot')
-            ALLOWED_AUTHENTICATION_SECRETS = ($DB.$SCHEMA.GITHUB_PAT)
+            ALLOWED_AUTHENTICATION_SECRETS = (GIT_SIS_INFRA.SECRETS.GITHUB_PAT)
             ENABLED = TRUE;
         GRANT USAGE ON INTEGRATION git_api_waldekkot TO ROLE SYSADMIN;
         USE ROLE SYSADMIN;
         CREATE GIT REPOSITORY IF NOT EXISTS $REPO
             API_INTEGRATION = git_api_waldekkot
-            GIT_CREDENTIALS = $DB.$SCHEMA.GITHUB_PAT
+            GIT_CREDENTIALS = GIT_SIS_INFRA.SECRETS.GITHUB_PAT
             ORIGIN = 'https://github.com/waldekkot/git-sis';
     "
     success "Bootstrap complete."

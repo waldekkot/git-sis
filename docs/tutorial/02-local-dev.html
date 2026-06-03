@@ -189,12 +189,48 @@ SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo \
   <div class="reveal">
     <div class="code-block">
       <div class="code-block-header"><span>bash — run tests</span><button class="copy-btn">Copy</button></div>
-      <pre># Tier 1: unit tests (no credentials, ~0.04s)
+      <pre># Tier 1: unit tests using Snowflake local testing framework (~1s, 100% coverage)
+# Ref: https://docs.snowflake.com/en/developer-guide/snowpark/python/testing-locally
 uv run pytest tests/unit/ -v
 
-# Tier 3: integration tests (real Snowflake, ~35s, temp schema auto-cleaned)
+# Tier 3: integration tests (real Snowflake, ~55s, temp schema auto-cleaned)
 SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo \
-  uv run pytest tests/integration/ -v</pre>
+  uv run pytest tests/integration/ -v
+
+# Optional: run unit tests against real Snowflake for cross-validation
+SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo \
+  uv run pytest tests/unit/ -v --snowflake-session=live</pre>
+    </div>
+  </div>
+
+  <h2 class="reveal">Snowflake local testing framework</h2>
+
+  <div class="reveal">
+    <p>
+      Unit tests use <code>Session.builder.config("local_testing", True).create()</code>
+      for an in-process Snowflake emulator — no credentials, no network required.
+      <code>ingest.py</code> uses the DataFrame API exclusively (no <code>session.sql()</code>)
+      so the emulator can run all logic locally.
+    </p>
+    <p>
+      Snowflake built-ins not yet implemented in the emulator
+      (<code>uniform</code>, <code>round</code>) are provided via
+      <code>@snowflake.snowpark.mock.patch</code> in <code>tests/unit/conftest.py</code>.
+    </p>
+    <div class="code-block">
+      <div class="code-block-header"><span>tests/unit/conftest.py — key pattern</span><button class="copy-btn">Copy</button></div>
+      <pre>from snowflake.snowpark.mock import patch, ColumnEmulator, ColumnType
+from snowflake.snowpark.functions import uniform as sf_uniform
+from snowflake.snowpark.types import LongType
+
+@patch(sf_uniform)
+def _mock_uniform(start, end, gen) -> ColumnEmulator:
+    """UNIFORM(low, high, gen) — in-process random value."""
+    n = len(gen) if hasattr(gen, "__len__") else 1
+    s, e = float(start), float(end)
+    result = ColumnEmulator(data=[random.uniform(s, e) for _ in range(n)])
+    result.sf_type = ColumnType(LongType(), False)
+    return result</pre>
     </div>
   </div>
 

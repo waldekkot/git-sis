@@ -218,12 +218,34 @@ snow streamlit get-url -c oregon-sedemo \
   <h2 class="reveal">Teardown (cleanup)</h2>
 
   <div class="reveal">
-    <div class="code-block">
-      <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
-      <pre># Drop all objects (STREAMLIT, GIT REPOSITORY, SECRET, schema, API integration)
-snow sql -c oregon-sedemo -f deploy/99_cleanup.sql</pre>
+    <p>Two cleanup levels — choose based on what you want to preserve:</p>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-icon">🔄</div>
+        <h4>99_cleanup.sql — reset demo</h4>
+        <p>Drops STREAMLIT, GIT REPOSITORY, GIT_SIS schema, and API integration.
+           <strong>Keeps</strong> <code>GIT_SIS_INFRA.SECRETS.GITHUB_PAT</code>.
+           Next bootstrap needs no PAT re-entry.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">☢️</div>
+        <h4>98_cleanup_infra.sql — full teardown</h4>
+        <p>Also drops <code>GIT_SIS_INFRA</code> database and the PAT secret.
+           Only use when fully decommissioning the demo.</p>
+      </div>
     </div>
-    <p>Cleanup is idempotent — safe to re-run. <code>PYPI_ACCESS_INTEGRATION</code> is a shared resource and is intentionally not dropped.</p>
+
+    <div class="code-block">
+      <div class="code-block-header"><span>bash — normal reset (keeps PAT)</span><button class="copy-btn">Copy</button></div>
+      <pre>snow sql -c oregon-sedemo -f deploy/99_cleanup.sql</pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-block-header"><span>bash — full decommission</span><button class="copy-btn">Copy</button></div>
+      <pre>snow sql -c oregon-sedemo -f deploy/98_cleanup_infra.sql</pre>
+    </div>
+    <p><code>PYPI_ACCESS_INTEGRATION</code> is a shared resource and is intentionally not dropped by either script.</p>
   </div>
 
   <!-- Footer -->

@@ -47,11 +47,13 @@ jobs:
         # snow CLI requires token_file_path (inline token not supported).
         # Write the PAT from GitHub Secrets to a temp file, then create
         # a named connection that scripts/deploy.sh can use with -c ci.
+        # config.toml must be chmod 0600 or snow CLI refuses to read it.
         run: |
           echo "$SF_PAT_TOKEN" > /tmp/sf_token.txt
           mkdir -p ~/.snowflake
           printf '[connections.ci]\naccount = "sfseeurope-wkot_demo1"\nuser = "wkot"\nauthenticator = "PROGRAMMATIC_ACCESS_TOKEN"\ntoken_file_path = "/tmp/sf_token.txt"\n' \
             > ~/.snowflake/config.toml
+          chmod 0600 ~/.snowflake/config.toml
         env:
           SF_PAT_TOKEN: ${{ secrets.SF_PAT_TOKEN }}
 

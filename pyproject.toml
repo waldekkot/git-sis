@@ -28,6 +28,10 @@ addopts = "-v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=80
 markers = [
     "integration: marks tests that require a real Snowflake connection (skip in CI)",
 ]
+filterwarnings = [
+    # Benign pandas compat warning from snowflake.snowpark.mock internals
+    "ignore::UserWarning:snowflake.snowpark.mock",
+]
 
 [tool.ruff]
 line-length = 100

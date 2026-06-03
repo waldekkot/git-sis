@@ -48,7 +48,7 @@ try:
     m4.metric("Rows loaded", f"{kpis['rows_loaded']:,}")
 
     st.subheader("Recent runs")
-    st.dataframe(get_run_history(session, limit=100), use_container_width=True, hide_index=True)
+    st.dataframe(get_run_history(session, limit=100), width="stretch", hide_index=True)
 except Exception as exc:  # noqa: BLE001
     st.warning(f"Could not load run history yet: {exc}")
     st.info("If this is the first run, ensure deploy/00_setup_env.sql has created the tables.")

@@ -146,7 +146,7 @@ def get_session() -> Session:
     <div class="code-block">
       <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
       <pre># Option A: shell runner (recommended)
-scripts/run-local.sh -c oregon-sedemo
+scripts/20_run-local.sh -c oregon-sedemo
 
 # Option B: direct
 SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo \
@@ -181,7 +181,7 @@ SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo \
       <g class="tier-1">
         <polygon points="140,150 360,150 420,200 80,200" fill="rgba(63,185,80,.2)" stroke="#3FB950" stroke-width="1.5"/>
         <text x="250" y="178" text-anchor="middle" fill="#3FB950" font-size="12" font-weight="600">Unit Tests</text>
-        <text x="250" y="194" text-anchor="middle" fill="#8B949E" font-size="9">13 tests · no Snowflake · 0.04s</text>
+        <text x="250" y="194" text-anchor="middle" fill="#8B949E" font-size="9">37 tests · no Snowflake · ~2s</text>
       </g>
     </svg>
   </div>
@@ -189,17 +189,98 @@ SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo \
   <div class="reveal">
     <div class="code-block">
       <div class="code-block-header"><span>bash — run tests</span><button class="copy-btn">Copy</button></div>
-      <pre># Tier 1: unit tests using Snowflake local testing framework (~1s, 100% coverage)
+      <pre># TDD inner loop: unit tests (Snowpark local testing + AppTest, ~2s, 100% coverage)
 # Ref: https://docs.snowflake.com/en/developer-guide/snowpark/python/testing-locally
-uv run pytest tests/unit/ -v
+# Ref: https://docs.streamlit.io/develop/api-reference/app-testing
+make test                                     # or: uv run pytest tests/unit/ -v
 
-# Tier 3: integration tests (real Snowflake, ~55s, temp schema auto-cleaned)
-SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo \
-  uv run pytest tests/integration/ -v
+# Watch mode — re-runs on file save
+make test-watch
 
-# Optional: run unit tests against real Snowflake for cross-validation
-SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo \
-  uv run pytest tests/unit/ -v --snowflake-session=live</pre>
+# Integration tests (real Snowflake, ~60s, temp schema auto-cleaned)
+make test-integration
+# or: SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo uv run pytest tests/integration/ -v
+
+# Cross-validate unit tests against real Snowflake
+make test-live
+# or: SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo uv run pytest tests/unit/ -v --snowflake-session=live</pre>
+    </div>
+  </div>
+
+  <h2 class="reveal">TDD workflow &amp; the mock inventory principle</h2>
+
+  <div class="reveal">
+    <p>
+      Unit tests combine two in-process tools: the
+      <strong>Snowpark local testing framework</strong> (real DataFrame emulator) and
+      <strong>Streamlit AppTest</strong> (UI interaction without a browser).
+      Together they give end-to-end UI + data-layer tests with zero credentials.
+    </p>
+    <p>
+      <strong>Mock inventory principle:</strong> mock only what the emulator cannot
+      provide; inject what's configurable.
+    </p>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin:1rem 0">
+      <thead>
+        <tr style="border-bottom:1px solid #30363D">
+          <th style="text-align:left;padding:.4rem;color:#8B949E">Need</th>
+          <th style="text-align:left;padding:.4rem;color:#8B949E">Pattern</th>
+          <th style="text-align:left;padding:.4rem;color:#8B949E">Why</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid #21262D">
+          <td style="padding:.4rem;color:#E6EDF3">Snowpark session backend</td>
+          <td style="padding:.4rem;font-family:monospace;color:#58A6FF">seeded_session fixture</td>
+          <td style="padding:.4rem;color:#8B949E">Real DataFrames, real rows, no credentials</td>
+        </tr>
+        <tr style="border-bottom:1px solid #21262D">
+          <td style="padding:.4rem;color:#E6EDF3">UUID_STRING built-in</td>
+          <td style="padding:.4rem;font-family:monospace;color:#58A6FF">uuid_patch fixture</td>
+          <td style="padding:.4rem;color:#8B949E">Emulator gap, not business logic</td>
+        </tr>
+        <tr style="border-bottom:1px solid #21262D">
+          <td style="padding:.4rem;color:#E6EDF3">uniform, round built-ins</td>
+          <td style="padding:.4rem;font-family:monospace;color:#58A6FF">@snowflake.snowpark.mock.patch</td>
+          <td style="padding:.4rem;color:#8B949E">Emulator gap, not business logic</td>
+        </tr>
+        <tr style="border-bottom:1px solid #21262D">
+          <td style="padding:.4rem;color:#E6EDF3">Force a controlled failure</td>
+          <td style="padding:.4rem;font-family:monospace;color:#58A6FF">MagicMock (one test)</td>
+          <td style="padding:.4rem;color:#8B949E">Only test that needs inaccessible tables</td>
+        </tr>
+        <tr>
+          <td style="padding:.4rem;color:#E6EDF3">Session seam itself</td>
+          <td style="padding:.4rem;font-family:monospace;color:#58A6FF">monkeypatch + unittest.mock</td>
+          <td style="padding:.4rem;color:#8B949E">Testing the seam, not Snowpark logic</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="reveal">
+    <div class="code-block">
+      <div class="code-block-header"><span>tests/unit/test_app.py — zero-mock UI test</span><button class="copy-btn">Copy</button></div>
+      <pre>@pytest.fixture()
+def snowpark_app(seeded_session, uuid_patch):  # real emulator + UUID patch
+    with patch("lib.session.get_session", return_value=seeded_session):
+        at = AppTest.from_file(APP_FILE).run()  # Streamlit AppTest in-process
+    return at, seeded_session
+
+def test_button_click_writes_500_rows(snowpark_app):
+    at, sess = snowpark_app
+    with patch("lib.session.get_session", return_value=sess):
+        at.button[0].click().run()          # UI interaction
+    assert "500" in at.success[0].value     # UI assertion
+    assert sess.table(_cfg.ORDERS_TABLE).count() == 500  # real Snowpark assertion</pre>
+    </div>
+    <div class="note">
+      <span class="note-icon">💡</span>
+      <div>
+        <code>seeded_session</code> is a <em>real</em> Snowpark local testing session, not a stub.
+        <code>count()</code> is a real DataFrame operation. AppTest and the emulator share the same
+        in-process tables — no MagicMock needed for the happy path.
+      </div>
     </div>
   </div>
 
@@ -213,24 +294,41 @@ SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo \
       so the emulator can run all logic locally.
     </p>
     <p>
-      Snowflake built-ins not yet implemented in the emulator
-      (<code>uniform</code>, <code>round</code>) are provided via
-      <code>@snowflake.snowpark.mock.patch</code> in <code>tests/unit/conftest.py</code>.
+      Snowflake built-ins not yet in the emulator
+      (<code>uniform</code>, <code>round</code>, <code>UUID_STRING</code>) are provided via
+      <code>@snowflake.snowpark.mock.patch</code> and <code>uuid_patch</code> in
+      <code>tests/unit/conftest.py</code>.
     </p>
     <div class="code-block">
-      <div class="code-block-header"><span>tests/unit/conftest.py — key pattern</span><button class="copy-btn">Copy</button></div>
+      <div class="code-block-header"><span>tests/unit/conftest.py — shared fixtures</span><button class="copy-btn">Copy</button></div>
       <pre>from snowflake.snowpark.mock import patch, ColumnEmulator, ColumnType
-from snowflake.snowpark.functions import uniform as sf_uniform
-from snowflake.snowpark.types import LongType
+from snowflake.snowpark.functions import uniform as sf_uniform, round as sf_round
+from snowflake.snowpark.types import LongType, DoubleType
+from unittest.mock import patch as mock_patch
 
+# @snowflake.snowpark.mock.patch — registered at module import,
+# active whenever the emulator processes uniform() in a DataFrame plan.
 @patch(sf_uniform)
-def _mock_uniform(start, end, gen) -> ColumnEmulator:
-    """UNIFORM(low, high, gen) — in-process random value."""
-    n = len(gen) if hasattr(gen, "__len__") else 1
-    s, e = float(start), float(end)
-    result = ColumnEmulator(data=[random.uniform(s, e) for _ in range(n)])
-    result.sf_type = ColumnType(LongType(), False)
-    return result</pre>
+def _mock_uniform(start, end, gen) -> ColumnEmulator: ...
+
+@patch(sf_round)
+def _mock_round(value, scale=0) -> ColumnEmulator: ...
+
+@pytest.fixture()
+def seeded_session() -> Session:
+    """Fresh emulator with empty ORDERS + INGEST_LOG tables."""
+    sess = Session.builder.config("local_testing", True).create()
+    sess.create_dataframe([], LOG_SCHEMA).write.save_as_table(_cfg.INGEST_LOG_TABLE)
+    sess.create_dataframe([], ORDERS_SCHEMA).write.save_as_table(_cfg.ORDERS_TABLE)
+    yield sess
+    sess.close()
+
+@pytest.fixture()
+def uuid_patch():
+    """UUID_STRING not in emulator — only justified unittest.mock."""
+    with mock_patch("lib.ingest.call_function",
+                    side_effect=lambda _: lit(str(uuid.uuid4()))):
+        yield</pre>
     </div>
   </div>
 

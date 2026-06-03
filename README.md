@@ -46,8 +46,13 @@ scripts/                   # numbered runners — logical step-by-step workflow
   90_cleanup.sh            # reset demo (keeps PAT secret)
   99_cleanup-infra.sh      # full teardown (drops everything, --yes to skip prompt)
 tests/
-  unit/                    # 35 tests, no Snowflake needed (CI) — 100% coverage
+  unit/                    # 37 tests, no Snowflake needed (CI) — 100% coverage
+    conftest.py            # seeded_session, uuid_patch, shared schemas, mock patches
+    test_app.py            # UI tests via Streamlit AppTest + Snowpark emulator
+    test_ingest.py         # data layer tests via Snowpark local testing
+    test_session.py        # session seam tests (mocks justified here)
   integration/             # 10 tests, real Snowflake (local only)
+Makefile                   # make test / dev / deploy / clean and more
 .pre-commit-config.yaml    # ruff lint+format, ty type check, pytest unit
 .github/workflows/ci.yml   # unit tests on every push; snow streamlit deploy on main
 docs/tutorial/             # interactive HTML tutorial (6 pages, animated SVGs)
@@ -138,23 +143,98 @@ git push && scripts/30_deploy.sh
 # Or deploy from Snowsight workspace: open → Deploy
 ```
 
+## Development workflow (TDD)
+
+### The three-ring testing model
+
+```
+ ┌─────────────────────────────────────────────┐
+ │  Ring 1 — local, 0 credentials, ~2s        │
+ │  Snowpark local testing + Streamlit AppTest │
+ │  make test    (TDD inner loop)              │
+ └─────────────────────────────────────────────┘
+         ↓  passes? push
+ ┌─────────────────────────────────────────────┐
+ │  Ring 2 — GitHub Actions CI               │
+ │  Same unit tests; snow streamlit deploy    │
+ │  on main branch                            │
+ └─────────────────────────────────────────────┘
+         ↓  deploy done? verify in Snowflake
+ ┌─────────────────────────────────────────────┐
+ │  Ring 3 — real Snowflake, ~60s            │
+ │  Integration tests (temp schema)           │
+ │  make test-integration                     │
+ │  make test-live  (cross-validate unit)     │
+ └─────────────────────────────────────────────┘
+```
+
+### TDD inner loop (`make test`, ~2s)
+
+1. Write a failing test in `tests/unit/`
+2. `make test` — red
+3. Implement the minimum code to pass
+4. `make test` — green
+5. Refactor. `make test` stays green.
+6. Before push: `make test-full` (~60s, exercises real Snowflake)
+
+### What to mock and why
+
+The goal is **zero MagicMock for business logic**. Use these patterns instead:
+
+| Need | Pattern | Why |
+|------|---------|-----|
+| Snowpark session backend | `seeded_session` fixture (local testing emulator) | Real DataFrames, real rows, no credentials |
+| UUID_STRING built-in | `uuid_patch` fixture (`@snowflake.snowpark.mock.patch`) | Emulator limitation; doesn't bypass logic |
+| `uniform`, `round` built-ins | `@snowflake.snowpark.mock.patch` in conftest | Same: emulator gap, not business logic |
+| Force a controlled failure | `MagicMock` in `test_warning_when_session_fails` | Only test that needs inaccessible tables |
+| Session seam tests | `monkeypatch` + `unittest.mock` in `test_session.py` | Testing the seam itself, not Snowpark logic |
+
+**Mock inventory principle:** mock only what the emulator cannot provide; inject what's configurable.
+
+### The snowpark_app fixture (zero-mock UI tests)
+
+AppTest combined with the local testing session gives end-to-end UI + data-layer tests:
+
+```python
+@pytest.fixture()
+def snowpark_app(seeded_session, uuid_patch):  # uuid_patch is a context, not a param
+    """AppTest backed by real Snowpark local testing session."""
+    with patch("lib.session.get_session", return_value=seeded_session):
+        at = AppTest.from_file(APP_FILE).run()
+    return at, seeded_session
+
+def test_button_click_writes_500_rows_to_orders(snowpark_app):
+    at, sess = snowpark_app
+    with patch("lib.session.get_session", return_value=sess):
+        at.button[0].click().run()              # Streamlit UI interaction
+    assert "500" in at.success[0].value         # UI assertion
+    assert sess.table(_cfg.ORDERS_TABLE).count() == 500  # real Snowpark assertion
+```
+
+No MagicMock in the happy path. The emulator writes real rows; `count()` is real.
+
 ## Tests
 
-Three-tier dev loop: local (no SF) → GitHub CI → real Snowflake.
+Three-ring command reference:
 
 ```bash
-# Tier 1 -- unit tests using Snowflake's local testing framework (100% coverage, ~1s)
-# Ref: https://docs.snowflake.com/en/developer-guide/snowpark/python/testing-locally
-uv run pytest tests/unit/ -v
+# Ring 1 — TDD inner loop (Snowpark local testing + AppTest, ~2s)
+make test                             # or: uv run pytest tests/unit/ -v
 
-# Tier 2 -- GitHub Actions runs unit tests + coverage check on every push
-# (see .github/workflows/ci.yml)
+# Ring 1 — watch mode (re-runs on file save)
+make test-watch
 
-# Tier 3 -- integration tests against real Snowflake (temp schema, auto-cleaned, ~60s)
-SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo uv run pytest tests/integration/ -v
+# Ring 2 — CI gate (same tests, runs in GitHub Actions)
+# Triggered automatically on push/PR. See .github/workflows/ci.yml.
 
-# Cross-validate unit tests against real Snowflake:
-SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo uv run pytest tests/unit/ -v --snowflake-session=live
+# Ring 3 — integration tests against real Snowflake (~60s)
+make test-integration                 # needs SNOWFLAKE_DEFAULT_CONNECTION_NAME
+
+# Ring 3 — cross-validate unit tests against real Snowflake
+make test-live
+
+# Full suite (unit + integration)
+make test-full
 ```
 
 Coverage is enforced at 80% minimum (`--cov-fail-under=80` in `pyproject.toml`).
@@ -163,6 +243,30 @@ Unit tests currently achieve **100%** across `app/lib/` and `app/streamlit_app.p
 **Local testing framework:** `ingest.py` uses the DataFrame API exclusively
 (no `session.sql()`) so the emulator runs all logic in-process. `uniform` and `round`
 Snowflake built-ins are provided via `@snowflake.snowpark.mock.patch` in `tests/unit/conftest.py`.
+
+## Makefile
+
+All common developer commands in one place:
+
+```bash
+make install          # uv sync + pre-commit install (one-time setup)
+make test             # fast unit tests (~2s, TDD inner loop)
+make test-watch       # watch mode on unit tests
+make test-full        # unit + integration
+make test-live        # cross-validate units against real Snowflake
+make dev              # start app locally (port 8501)
+make setup            # one-time Snowflake setup (infra DB + GIT_SIS schema)
+make deploy           # snow streamlit deploy
+make verify           # check app + print URL
+make open             # open app URL in browser
+make clean            # reset demo (keeps PAT secret)
+make clean-all        # full teardown
+make lint             # ruff check + format check
+make fmt              # auto-format with ruff
+make typecheck        # ty check app/lib/
+make hooks            # run all pre-commit hooks
+make help             # list all targets with descriptions
+```
 
 ## Pre-commit Hooks
 
@@ -185,7 +289,7 @@ GitHub Actions runs on every push and pull request:
 
 | Job | Trigger | What it does |
 |-----|---------|--------------|
-| `unit-tests` | push + PR | ruff lint + 35 unit tests + 100% coverage check |
+| `unit-tests` | push + PR | ruff lint + 37 unit tests + 100% coverage check |
 | `deploy-to-sis` | push to `main` only | `snow streamlit deploy` after unit-tests pass |
 
 The deploy job runs `scripts/30_deploy.sh -c ci` which executes

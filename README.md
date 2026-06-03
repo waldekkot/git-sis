@@ -26,10 +26,48 @@ app/                      # SiS app root (FROM @repo/branches/main/app/)
   pages/                  # run history, error explorer
   lib/session.py          # local/SiS session seam
   lib/ingest.py           # Snowpark ingestion + logging + error handling
-  lib/config.py           # table FQNs
+  lib/config.py           # table FQNs (env-overridable for test isolation)
   .streamlit/config.toml  # Snowflake theme
+  pyproject.toml          # SiS container runtime dependency file (required)
 deploy/00_setup_env.sql   # idempotent schema + tables (CREATE OR ALTER)
 deploy/10_git_and_streamlit.sql  # API integration + git repo + CREATE STREAMLIT FROM
+deploy/99_cleanup.sql     # tear down all demo objects
+scripts/                  # shell runner scripts (--help / --version on all)
+  setup.sh                # create schema + tables
+  run-local.sh            # launch app locally
+  deploy.sh               # redeploy loop (--bootstrap for first run)
+  verify.sh               # check live app + print URL (--open to launch browser)
+tests/
+  unit/                   # 13 tests, no Snowflake needed (CI)
+  integration/            # 10 tests, real Snowflake (local only)
+.github/workflows/ci.yml  # runs unit tests + ruff on every push
+```
+
+## Shell runners (--help / --version on all)
+
+```bash
+scripts/setup.sh                          # create schema + tables
+scripts/run-local.sh                      # run app locally (default port 8501)
+scripts/run-local.sh -p 8533             # custom port
+scripts/deploy.sh                         # redeploy after git push
+scripts/deploy.sh --bootstrap             # first-time wiring + deploy
+scripts/verify.sh                         # show object + URL
+scripts/verify.sh --open                  # open URL in browser
+```
+
+## Tests
+
+Three-tier dev loop matching the app: local (no SF) → GitHub CI → real Snowflake.
+
+```bash
+# Tier 1 -- unit tests, no Snowflake, zero credentials
+uv run pytest tests/unit/ -v
+
+# Tier 2 -- GitHub Actions runs unit tests automatically on every push
+# (see .github/workflows/ci.yml)
+
+# Tier 3 -- integration tests against real Snowflake (temp schema, auto-cleaned)
+SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo uv run pytest tests/integration/ -v
 ```
 
 ## Run it
@@ -60,9 +98,20 @@ snow streamlit get-url -c oregon-sedemo SNOWFLAKE_LEARNING_DB.GIT_SIS.INGEST_CON
 ## Redeploy after a change
 
 ```bash
+git push && scripts/deploy.sh            # shell runner wraps fetch + recreate + add live version
+```
+
+Or manually:
+```bash
 git push
 snow sql -c oregon-sedemo -q "ALTER GIT REPOSITORY SNOWFLAKE_LEARNING_DB.GIT_SIS.APP_REPO FETCH"
 # then re-run section 3 of deploy/10_git_and_streamlit.sql (CREATE OR REPLACE + ADD LIVE VERSION)
+```
+
+## Cleanup (remove all demo objects)
+
+```bash
+snow sql -c oregon-sedemo -f deploy/99_cleanup.sql
 ```
 
 ## Target

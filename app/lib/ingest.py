@@ -27,7 +27,7 @@ from snowflake.snowpark.functions import (
     round as sf_round,
 )
 
-from lib.config import INGEST_LOG_TABLE, ORDERS_TABLE
+from lib import config as _cfg  # module reference so test reloads propagate
 
 PROC_NAME = "LOAD_SYNTHETIC_ORDERS"
 
@@ -35,7 +35,7 @@ PROC_NAME = "LOAD_SYNTHETIC_ORDERS"
 def _log_start(session: Session, run_id: str) -> None:
     """Insert a RUNNING row. Parameterized -- never interpolate run_id into SQL."""
     session.sql(
-        f"INSERT INTO {INGEST_LOG_TABLE} "
+        f"INSERT INTO {_cfg.INGEST_LOG_TABLE} "
         "(RUN_ID, PROC_NAME, STATUS, STARTED_AT) "
         "SELECT ?, ?, 'RUNNING', CURRENT_TIMESTAMP()",
         params=[run_id, PROC_NAME],
@@ -56,7 +56,7 @@ def _log_finish(
         "ROWS_LOADED": lit(rows_loaded),
         "ERROR_MSG": lit(error_msg[:1000] if error_msg else None),
     }
-    session.table(INGEST_LOG_TABLE).update(updates, col("RUN_ID") == lit(run_id))
+    session.table(_cfg.INGEST_LOG_TABLE).update(updates, col("RUN_ID") == lit(run_id))
 
 
 def _synthetic_orders(session: Session, run_id: str, num_rows: int):
@@ -104,7 +104,7 @@ def run_ingestion(
             raise ValueError("Injected failure (demo of the error path)")
 
         df = _synthetic_orders(session, run_id, num_rows)
-        df.write.mode("append").save_as_table(ORDERS_TABLE)
+        df.write.mode("append").save_as_table(_cfg.ORDERS_TABLE)
 
         _log_finish(session, run_id, "SUCCESS", rows_loaded=num_rows)
         return {"run_id": run_id, "status": "SUCCESS", "rows_loaded": num_rows}
@@ -119,7 +119,7 @@ def run_ingestion(
 def get_run_history(session: Session, limit: int = 100):
     """Return recent runs as a pandas DataFrame for display."""
     return (
-        session.table(INGEST_LOG_TABLE)
+        session.table(_cfg.INGEST_LOG_TABLE)
         .sort(col("STARTED_AT").desc())
         .limit(limit)
         .to_pandas()
@@ -135,7 +135,7 @@ def get_kpis(session: Session) -> dict:
             COUNT_IF(STATUS = 'FAILED')                       AS FAILED_RUNS,
             COUNT_IF(STATUS = 'SUCCESS')                      AS SUCCESS_RUNS,
             COALESCE(SUM(IFF(STATUS = 'SUCCESS', ROWS_LOADED, 0)), 0) AS ROWS_LOADED
-        FROM {INGEST_LOG_TABLE}
+        FROM {_cfg.INGEST_LOG_TABLE}
         """
     ).collect()[0]
     return {

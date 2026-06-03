@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import streamlit as st
-
 from lib.config import INGEST_LOG_TABLE
 from lib.session import get_session
 

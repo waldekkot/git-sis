@@ -10,7 +10,6 @@ from __future__ import annotations
 import uuid
 
 import streamlit as st
-
 from lib.ingest import get_kpis, get_run_history, run_ingestion
 from lib.session import get_session
 
@@ -25,7 +24,9 @@ st.caption("Synthetic-orders ingestion with structured logging and error handlin
 with st.container(border=True):
     st.subheader("Trigger a run")
     c1, c2, c3 = st.columns([1, 1, 2])
-    num_rows = c1.number_input("Rows to ingest", min_value=1, max_value=100_000, value=500, step=100)
+    num_rows = c1.number_input(
+        "Rows to ingest", min_value=1, max_value=100_000, value=500, step=100
+    )
     force_fail = c2.toggle("Force a failure", value=False, help="Exercise the error path")
     if c3.button("Run ingestion", type="primary", use_container_width=True):
         run_id = str(uuid.uuid4())
@@ -35,7 +36,6 @@ with st.container(border=True):
             st.success(f"Run {run_id} succeeded - {result['rows_loaded']} rows loaded.")
         except Exception as exc:  # noqa: BLE001 - surface, don't crash
             st.error(f"Run {run_id} FAILED and was logged: {exc}")
-        get_kpis.clear() if hasattr(get_kpis, "clear") else None
         st.rerun()
 
 # --- KPIs --------------------------------------------------------------------

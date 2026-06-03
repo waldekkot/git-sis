@@ -20,9 +20,11 @@ from snowflake.snowpark.functions import (
     current_timestamp,
     lit,
     random,
-    round as sf_round,
     uniform,
     when,
+)
+from snowflake.snowpark.functions import (
+    round as sf_round,
 )
 
 from lib.config import INGEST_LOG_TABLE, ORDERS_TABLE

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import streamlit as st
-
 from lib.ingest import get_run_history
 from lib.session import get_session
 

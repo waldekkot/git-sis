@@ -18,6 +18,7 @@ dev = [
     "pytest-cov>=6.0",
     "ty>=0.0.42",
     "pre-commit>=4.0",
+    "pytest-xdist>=3.8.0",
 ]
 
 [tool.pytest.ini_options]

@@ -8,15 +8,23 @@ Design principles
 * Mock only what the local testing emulator cannot provide.
   - `uniform`, `round`: @snowflake.snowpark.mock.patch (preferred Snowflake API)
   - `call_function("UUID_STRING")`: unittest.mock (not in emulator; see uuid_patch)
-  - Session backend: inject a real local testing session, never a MagicMock
-* `seeded_session` provides empty ORDERS + INGEST_LOG tables per test.
-  Every test that calls run_ingestion, get_kpis, or get_run_history needs this.
+  - Session backend: inject a real session (emulator or live), never a MagicMock
+* `_module_session` creates ONE session per test module in both modes:
+  - local : Snowpark local-testing emulator   (~30 ms, zero credentials)
+  - live  : real Snowflake with a disposable  (~2 s,  temp schema)
+            GIT_SIS_TEST_<uuid> schema
+  This avoids 44 × session-create overhead (the dominant cost at 46 tests).
+* `seeded_session` truncates ORDERS + INGEST_LOG with .delete() (~2 ms local,
+  ~100 ms live) before each test, providing clean isolated state without a new
+  connection.
 * `uuid_patch` is active for the duration of its fixture scope so all
   AppTest .run() calls within a test see the patch.
 """
 
 from __future__ import annotations
 
+import importlib
+import os
 import random as py_random
 import uuid
 from unittest.mock import patch as mock_patch
@@ -125,15 +133,29 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
-def seeded_session(request) -> Session:
-    """Fresh Snowpark local testing session with empty ORDERS + INGEST_LOG tables.
+@pytest.fixture(scope="module")
+def _module_session(request) -> Session:
+    """One session per test module — emulator in local mode, real Snowflake in live mode.
 
-    Function-scoped: each test gets clean tables, preventing cross-test interference.
+    local mode
+        Creates a Snowpark local-testing session with empty ORDERS + INGEST_LOG
+        tables (~30 ms).  Zero credentials, zero network.
 
-    When --snowflake-session=live (with SNOWFLAKE_DEFAULT_CONNECTION_NAME set),
-    creates a temporary schema in real Snowflake instead.  Useful for cross-
-    validating that local testing results match production behaviour.
+    live mode
+        Creates a real Snowflake session and a disposable GIT_SIS_TEST_<uuid>
+        schema (~2 s).  The schema FQN is written to GIT_SIS_SCHEMA so that
+        lib.config picks it up for this worker process.  Schema is dropped in
+        teardown.
+
+    Why module scope?
+        Session creation costs ~30 ms (local) or ~2 s (live).  With 46 tests
+        this would add ~1.4 s (local) or ~90 s (live) of pure setup overhead.
+        One session per module (2 modules with seeded_session tests) costs
+        ~60 ms / ~4 s — a 20–45× reduction.
+
+    Compatible with pytest-xdist --dist=loadfile: all tests from the same file
+    run on the same worker, so this module session is never shared across
+    workers.
     """
     mode = request.config.getoption("--snowflake-session", default="local")
 
@@ -143,14 +165,12 @@ def seeded_session(request) -> Session:
         sess.create_dataframe([], ORDERS_SCHEMA).write.save_as_table(_cfg.ORDERS_TABLE)
         yield sess
         sess.close()
-    else:
-        import importlib
-        import os
+
+    else:  # live
+        import uuid as _uuid
 
         conn = os.getenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", "default")
         sess = Session.builder.config("connection_name", conn).create()
-
-        import uuid as _uuid
 
         schema_fqn = f"SNOWFLAKE_LEARNING_DB.GIT_SIS_TEST_{_uuid.uuid4().hex[:8].upper()}"
         sess.sql(f"CREATE SCHEMA IF NOT EXISTS {schema_fqn}").collect()
@@ -177,6 +197,26 @@ def seeded_session(request) -> Session:
 
 
 @pytest.fixture()
+def seeded_session(request, _module_session) -> Session:  # noqa: ARG001
+    """Clean ORDERS + INGEST_LOG tables before each test.
+
+    Reuses the module-scoped session — no new connection per test.
+    Truncates via DataFrame.delete() (~2 ms local, ~100 ms live).
+    In live mode, reloads lib.config to ensure the per-module schema FQN
+    set by _module_session is reflected in _cfg.ORDERS_TABLE etc.
+    """
+    mode = request.config.getoption("--snowflake-session", default="local")
+    if mode != "local":
+        # Re-sync config in case another fixture temporarily changed it.
+        importlib.reload(importlib.import_module("lib.config"))
+
+    _module_session.table(_cfg.ORDERS_TABLE).delete()
+    _module_session.table(_cfg.INGEST_LOG_TABLE).delete()
+    yield _module_session
+    # No teardown: next test's setup truncates again.
+
+
+@pytest.fixture()
 def uuid_patch():
     """Patch call_function('UUID_STRING') for the Snowpark local testing emulator.
 
@@ -194,7 +234,7 @@ def uuid_patch():
 
 
 # ---------------------------------------------------------------------------
-# Legacy alias — keeps test_ingest.py working without changes during migration
+# Legacy alias — kept for backwards compatibility; prefer seeded_session
 # ---------------------------------------------------------------------------
 
 
@@ -208,8 +248,6 @@ def local_session(request) -> Session:
     if mode == "local":
         sess = Session.builder.config("local_testing", True).create()
     else:
-        import os
-
         conn = os.getenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", "default")
         sess = Session.builder.config("connection_name", conn).create()
     yield sess

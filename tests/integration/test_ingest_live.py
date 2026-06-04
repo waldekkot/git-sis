@@ -115,7 +115,7 @@ def test_fail_path_no_rows_in_orders(sf_session, test_schema):
 
 
 def test_get_kpis_counts_both_statuses(sf_session, test_schema):
-    # Ensure at least one success and one failure exist (may accumulate across tests)
+    # Each test runs against an isolated schema — create the required data here.
     run_ingestion(sf_session, str(uuid.uuid4()), num_rows=5)
     with pytest.raises(ValueError):
         run_ingestion(sf_session, str(uuid.uuid4()), fail=True)
@@ -145,5 +145,8 @@ def test_get_run_history_sorted_most_recent_first(sf_session, test_schema):
 
 
 def test_get_run_history_respects_limit(sf_session, test_schema):
+    # Seed more rows than the limit so the cap is actually exercised.
+    for _ in range(4):
+        run_ingestion(sf_session, str(uuid.uuid4()), num_rows=3)
     df = get_run_history(sf_session, limit=2)
-    assert len(df) <= 2
+    assert len(df) == 2

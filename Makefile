@@ -26,19 +26,21 @@ export GIT_SIS_DATABASE GIT_SIS_SCHEMA GIT_SIS_APP_NAME GIT_SIS_WAREHOUSE
 # Usage: make deploy COMMIT=v1
 COMMIT ?=
 
-.PHONY: init install test test-watch test-watch-install test-xdist \
-        test-full test-integration test-live \
-        dev dev-port setup setup-git deploy deploy-git deploy-sql \
-        verify open clean clean-all lint fmt typecheck arch hooks help
+.PHONY: install init test test-watch test-watch-install test-xdist \
+        test-full test-integration test-live test-smoke \
+        dev dev-port setup setup-git seed deploy deploy-git deploy-sql \
+        verify open clean clean-all lint fmt typecheck arch hooks check-docs help
 
 # -- First-time setup ----------------------------------------------------------
 
-init:  ## One-command onboarding: deps + pre-commit + Snowflake schema
+install:  ## Install deps + pre-commit hooks (no Snowflake needed — safe for CI/Codespaces)
+	uv sync && uv run pre-commit install
+
+init:  ## Full onboarding: install + Snowflake schema (requires a working connection)
 	@echo ""
 	@echo "  git-sis — first-time setup"
 	@echo "  ─────────────────────────────────────────"
-	uv sync
-	uv run pre-commit install
+	$(MAKE) install
 	@echo ""
 	@echo "  Checking for a Snowflake connection named '$(CONN)' ..."
 	@snow connection list 2>/dev/null | grep -q "$(CONN)" \
@@ -52,9 +54,6 @@ init:  ## One-command onboarding: deps + pre-commit + Snowflake schema
 	@echo ""
 	@echo "  Setup complete. Try: make dev"
 	@echo ""
-
-install:  ## Install deps + pre-commit hooks (subset of init — skips schema setup)
-	uv sync && uv run pre-commit install
 
 # -- Testing -------------------------------------------------------------------
 

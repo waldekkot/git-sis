@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>git-sis Tutorial — Adding a Purge Feature (TDD Walkthrough)</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    /* ── TDD cycle diagram ─────────────────────────────────────── */
+    @keyframes red-pulse {
+      0%, 100% { stroke: #F85149; fill: rgba(248,81,73,.18); }
+      50%       { stroke: #F85149; fill: rgba(248,81,73,.35); }
+    }
+    @keyframes green-pop {
+      from { transform: scale(0.7); opacity: 0; }
+      to   { transform: scale(1);   opacity: 1; }
+    }
+    @keyframes arc-draw {
+      from { stroke-dashoffset: 160; }
+      to   { stroke-dashoffset: 0;   }
+    }
+    .svg-anim .red-node   { animation: red-pulse 2s ease-in-out infinite; }
+    .svg-anim .green-node { animation: green-pop .5s ease forwards 0.3s; opacity: 0; }
+    .svg-anim .arc-rg {
+      stroke-dasharray: 160; stroke-dashoffset: 160;
+      animation: arc-draw .8s ease forwards 0.2s;
+    }
+    .svg-anim .arc-gr {
+      stroke-dasharray: 160; stroke-dashoffset: 160;
+      animation: arc-draw .8s ease forwards 1s;
+    }
+
+    /* ── Dialog flow diagram ───────────────────────────────────── */
+    @keyframes step-in {
+      from { opacity: 0; transform: translateX(-10px); }
+      to   { opacity: 1; transform: translateX(0);     }
+    }
+    .dialog-step { opacity: 0; }
+    .dialog-step:nth-child(1) { animation: step-in .4s ease forwards 0.1s; }
+    .dialog-step:nth-child(2) { animation: step-in .4s ease forwards 0.5s; }
+    .dialog-step:nth-child(3) { animation: step-in .4s ease forwards 0.9s; }
+    .dialog-step:nth-child(4) { animation: step-in .4s ease forwards 1.3s; }
+
+    /* ── Diff-style code colors ────────────────────────────────── */
+    .diff-add { color: #3FB950; background: rgba(63,185,80,.08); display: block; }
+    .diff-del { color: #F85149; background: rgba(248,81,73,.08); display: block; }
+    .diff-ctx { color: #8B949E; display: block; }
+
+    /* ── Phase timeline ────────────────────────────────────────── */
+    .phase-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 20px 0;
+    }
+    .phase-box {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      position: relative;
+    }
+    .phase-box.red   { border-color: rgba(248,81,73,.5); }
+    .phase-box.green { border-color: rgba(63,185,80,.5); }
+    .phase-box.blue  { border-color: rgba(41,181,232,.4); }
+    .phase-label {
+      font-size: .68rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .phase-box.red   .phase-label { color: #F85149; }
+    .phase-box.green .phase-label { color: #3FB950; }
+    .phase-box.blue  .phase-label { color: #29B5E8; }
+    .phase-box p { font-size: .85rem; margin: 0; color: var(--text-muted); }
+    .phase-box strong { color: var(--text); }
+
+    @media (max-width: 560px) { .phase-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+<nav class="site-nav">
+  <a class="nav-logo" href="index.html">
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+      <path d="M11 2L3 6.5v9L11 20l8-4.5v-9L11 2z" fill="none" stroke="#29B5E8" stroke-width="1.5"/>
+      <circle cx="11" cy="11" r="3" fill="#29B5E8"/>
+    </svg>
+    git-sis
+  </a>
+  <span class="nav-chapter">Chapter 6 — Adding a Feature (TDD Walkthrough)</span>
+  <span class="nav-pill">7 / 7</span>
+</nav>
+<div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
+
+<main>
+  <div class="hero">
+    <h1>Adding a <span class="highlight">Purge Feature</span><br>from Scratch, TDD-First</h1>
+    <p class="page-subtitle">
+      A concrete worked example of the full change cycle: design decisions,
+      failing tests, implementation, AppTest gotchas, and shipping — 9 new tests,
+      100 % coverage maintained throughout.
+    </p>
+  </div>
+
+  <h2 class="reveal">What we're building</h2>
+
+  <div class="reveal">
+    <p>
+      The ops console needs a <strong>"Purge Orders" button</strong>: a destructive action that
+      deletes every row from the <code>ORDERS</code> table, logs the event to
+      <code>INGEST_LOG</code> for auditability, and shows the operator a confirmation
+      dialog before proceeding.
+    </p>
+    <p>
+      This page walks through every decision and every line of code in the order they
+      were written — exactly as TDD demands.
+    </p>
+  </div>
+
+  <!-- Phase timeline -->
+  <div class="phase-grid reveal">
+    <div class="phase-box red">
+      <div class="phase-label">Phase 1 — RED</div>
+      <p><strong>Write failing tests</strong> before any implementation exists. <code>ImportError</code> is the first red.</p>
+    </div>
+    <div class="phase-box green">
+      <div class="phase-label">Phase 2 — GREEN</div>
+      <p><strong>Implement the minimum code</strong> to make every test pass. Nothing more.</p>
+    </div>
+    <div class="phase-box blue">
+      <div class="phase-label">Phase 3 — UI Layer</div>
+      <p><strong>AppTest tests</strong> drive the Streamlit UI. Discover and resolve the <code>@st.dialog</code> gotcha.</p>
+    </div>
+    <div class="phase-box blue" style="border-color:rgba(63,185,80,.4)">
+      <div class="phase-label" style="color:#3FB950">Phase 4 — SHIP</div>
+      <p><strong>Commit, push, CI green, SiS deploy</strong>. 46 tests, 100 % coverage.</p>
+    </div>
+  </div>
+
+  <!-- TDD cycle SVG -->
+  <div class="diagram-wrap reveal">
+    <svg class="svg-anim" viewBox="0 0 500 170" fill="none" xmlns="http://www.w3.org/2000/svg"
+         style="width:100%;max-width:500px" role="img" aria-label="TDD red-green cycle">
+
+      <!-- Red node -->
+      <g class="red-node">
+        <circle cx="130" cy="85" r="52" fill="rgba(248,81,73,.18)" stroke="#F85149" stroke-width="1.5"/>
+        <text x="130" y="78" text-anchor="middle" fill="#F85149" font-size="13" font-weight="700">RED</text>
+        <text x="130" y="96" text-anchor="middle" fill="#F85149" font-size="9">write failing test</text>
+        <text x="130" y="109" text-anchor="middle" fill="#8B949E" font-size="8">make test → FAIL</text>
+      </g>
+
+      <!-- Green node -->
+      <g class="green-node">
+        <circle cx="370" cy="85" r="52" fill="rgba(63,185,80,.18)" stroke="#3FB950" stroke-width="1.5"/>
+        <text x="370" y="78" text-anchor="middle" fill="#3FB950" font-size="13" font-weight="700">GREEN</text>
+        <text x="370" y="96" text-anchor="middle" fill="#3FB950" font-size="9">implement to pass</text>
+        <text x="370" y="109" text-anchor="middle" fill="#8B949E" font-size="8">make test → PASS</text>
+      </g>
+
+      <!-- Arc: red → green -->
+      <path class="arc-rg" d="M178 60 Q250 10 322 60"
+            stroke="#29B5E8" stroke-width="1.5" fill="none" stroke-linecap="round"
+            marker-end="url(#td1)"/>
+      <text x="250" y="28" text-anchor="middle" fill="#8B949E" font-size="9">implement</text>
+
+      <!-- Arc: green → red -->
+      <path class="arc-gr" d="M322 110 Q250 160 178 110"
+            stroke="#58A6FF" stroke-width="1.5" fill="none" stroke-linecap="round"
+            marker-end="url(#td2)"/>
+      <text x="250" y="156" text-anchor="middle" fill="#8B949E" font-size="9">next test</text>
+
+      <defs>
+        <marker id="td1" markerWidth="7" markerHeight="7" refX="5" refY="2.5" orient="auto">
+          <path d="M0,0 L0,5 L7,2.5 z" fill="#29B5E8"/>
+        </marker>
+        <marker id="td2" markerWidth="7" markerHeight="7" refX="5" refY="2.5" orient="auto">
+          <path d="M0,0 L0,5 L7,2.5 z" fill="#58A6FF"/>
+        </marker>
+      </defs>
+    </svg>
+  </div>
+
+  <!-- ================================================================ -->
+  <h2 class="reveal">Step 1 — Design decisions (before any code)</h2>
+
+  <div class="reveal">
+    <p>
+      Four questions answered <em>before</em> writing a single line of code.
+      Each answer drives a concrete test requirement.
+    </p>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin:1rem 0">
+      <thead>
+        <tr style="border-bottom:1px solid #30363D">
+          <th style="text-align:left;padding:.4rem .6rem;color:#8B949E">Question</th>
+          <th style="text-align:left;padding:.4rem .6rem;color:#8B949E">Decision</th>
+          <th style="text-align:left;padding:.4rem .6rem;color:#8B949E">Drives test</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid #21262D">
+          <td style="padding:.4rem .6rem;color:#E6EDF3">Confirmation UX</td>
+          <td style="padding:.4rem .6rem;color:#58A6FF"><code>@st.dialog</code> modal (Streamlit 1.37+)</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Dialog opens on button click; confirm/cancel both tested</td>
+        </tr>
+        <tr style="border-bottom:1px solid #21262D">
+          <td style="padding:.4rem .6rem;color:#E6EDF3">Audit trail</td>
+          <td style="padding:.4rem .6rem;color:#58A6FF">Log PURGE event to INGEST_LOG</td>
+          <td style="padding:.4rem .6rem;color:#8B949E"><code>PROC_NAME="PURGE_ORDERS"</code>, <code>STATUS="SUCCESS"</code>, <code>ROWS_LOADED=n</code></td>
+        </tr>
+        <tr style="border-bottom:1px solid #21262D">
+          <td style="padding:.4rem .6rem;color:#E6EDF3">UI placement</td>
+          <td style="padding:.4rem .6rem;color:#58A6FF">"⚠️ Danger Zone" collapsible expander, below run history</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Purge button present in expander; normal KPIs unaffected</td>
+        </tr>
+        <tr>
+          <td style="padding:.4rem .6rem;color:#E6EDF3">Snowpark API</td>
+          <td style="padding:.4rem .6rem;color:#58A6FF"><code>DataFrame.delete()</code> — no <code>session.sql("TRUNCATE")</code></td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Works in local testing emulator (no network required)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ================================================================ -->
+  <h2 class="reveal">Step 2 — Layer 1: write failing ingest tests (RED)</h2>
+
+  <div class="reveal">
+    <p>
+      Start with <code>tests/unit/test_ingest.py</code>. Add the import of
+      <code>purge_orders</code> — this is the first red: an <code>ImportError</code>
+      because the function doesn't exist yet.
+    </p>
+    <div class="code-block">
+      <div class="code-block-header"><span>tests/unit/test_ingest.py — import line (RED trigger)</span><button class="copy-btn">Copy</button></div>
+      <pre><span class="diff-del">- from lib.ingest import PROC_NAME, _synthetic_orders, get_kpis, get_run_history, run_ingestion</span>
+<span class="diff-add">+ from lib.ingest import PROC_NAME, _synthetic_orders, get_kpis, get_run_history, purge_orders, run_ingestion</span></pre>
+    </div>
+    <div class="code-block">
+      <div class="code-block-header"><span>bash — first red</span><button class="copy-btn">Copy</button></div>
+      <pre>make test
+# ImportError: cannot import name 'purge_orders' from 'lib.ingest'</pre>
+    </div>
+  </div>
+
+  <div class="reveal">
+    <p>Now append the four new test functions:</p>
+    <div class="code-block">
+      <div class="code-block-header"><span>tests/unit/test_ingest.py — 4 new tests (RED)</span><button class="copy-btn">Copy</button></div>
+      <pre>def test_purge_orders_empties_orders_table(seeded_session, uuid_patch):  # noqa: ARG001
+    """After purge, ORDERS table must be empty."""
+    run_ingestion(seeded_session, str(uuid.uuid4()), num_rows=5)
+    assert seeded_session.table(_cfg.ORDERS_TABLE).count() == 5  # precondition
+    purge_orders(seeded_session)
+    assert seeded_session.table(_cfg.ORDERS_TABLE).count() == 0
+
+
+def test_purge_orders_returns_deleted_count(seeded_session, uuid_patch):  # noqa: ARG001
+    """purge_orders() must return the number of rows that were deleted."""
+    run_ingestion(seeded_session, str(uuid.uuid4()), num_rows=7)
+    deleted = purge_orders(seeded_session)
+    assert deleted == 7
+
+
+def test_purge_orders_logs_purge_event_to_ingest_log(seeded_session, uuid_patch):  # noqa: ARG001
+    """purge_orders() must log a PURGE_ORDERS event to INGEST_LOG."""
+    run_ingestion(seeded_session, str(uuid.uuid4()), num_rows=3)
+    purge_orders(seeded_session)
+    log = seeded_session.table(_cfg.INGEST_LOG_TABLE).collect()
+    purge_entries = [r for r in log if r["PROC_NAME"] == "PURGE_ORDERS"]
+    assert len(purge_entries) == 1
+    assert purge_entries[0]["STATUS"] == "SUCCESS"
+    assert purge_entries[0]["ROWS_LOADED"] == 3
+
+
+def test_purge_orders_on_empty_table_returns_zero(seeded_session):
+    """Purging an already-empty ORDERS table returns 0 and does not raise."""
+    deleted = purge_orders(seeded_session)
+    assert deleted == 0
+    log = seeded_session.table(_cfg.INGEST_LOG_TABLE).collect()
+    purge_entries = [r for r in log if r["PROC_NAME"] == "PURGE_ORDERS"]
+    assert len(purge_entries) == 1</pre>
+    </div>
+    <div class="note">
+      <span class="note-icon">💡</span>
+      <div>
+        <strong>Pattern:</strong> precondition asserts (<code>count() == 5</code>) confirm the test
+        set-up is correct before the operation under test runs. They catch silent fixture bugs early.
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <h2 class="reveal">Step 3 — Implement <code>purge_orders()</code> (GREEN)</h2>
+
+  <div class="reveal">
+    <p>
+      Add the implementation to <code>app/lib/ingest.py</code>. The key constraint:
+      <strong>no <code>session.sql()</code></strong>. The Snowpark local testing emulator
+      supports only the DataFrame API, so <code>TRUNCATE TABLE</code> is out.
+      Use <code>DataFrame.delete()</code> instead — it translates to
+      <code>DELETE FROM &lt;table&gt;</code> and works in the emulator.
+    </p>
+    <div class="code-block">
+      <div class="code-block-header"><span>app/lib/ingest.py — additions (diff)</span><button class="copy-btn">Copy</button></div>
+      <pre><span class="diff-add">+ import uuid as _uuid          # added to existing imports</span>
+
+  PROC_NAME = "LOAD_SYNTHETIC_ORDERS"
+<span class="diff-add">+ PURGE_PROC_NAME = "PURGE_ORDERS"</span>
+
+<span class="diff-add">+ def purge_orders(session: Session) -> int:
++     """Delete all rows from ORDERS and log a PURGE_ORDERS event to INGEST_LOG.
++
++     Uses DataFrame.delete() — the Snowpark API for row deletion.
++     Compatible with the local testing emulator (no session.sql() used).
++     """
++     # Count first so we can report it even after deletion.
++     rows_to_delete = session.table(_cfg.ORDERS_TABLE).count()
++
++     # Delete all rows using the DataFrame API.
++     # DataFrame.delete() translates to DELETE FROM <table> with no WHERE clause.
++     session.table(_cfg.ORDERS_TABLE).delete()
++
++     # Record the purge event in INGEST_LOG for auditability.
++     run_id = str(_uuid.uuid4())
++     now = datetime.datetime.now(datetime.UTC)
++     session.create_dataframe(
++         [[run_id, PURGE_PROC_NAME, "SUCCESS", rows_to_delete, None, None, now, now]],
++         schema=_LOG_SCHEMA,
++     ).write.mode("append").save_as_table(_cfg.INGEST_LOG_TABLE)
++
++     return rows_to_delete</span></pre>
+    </div>
+    <div class="code-block">
+      <div class="code-block-header"><span>bash — now green</span><button class="copy-btn">Copy</button></div>
+      <pre>make test
+# 42 passed in 2.31s · coverage 100%</pre>
+    </div>
+  </div>
+
+  <div class="reveal">
+    <div class="warn">
+      <span class="note-icon">⚠️</span>
+      <div>
+        <strong>Why not <code>session.sql("TRUNCATE TABLE ...")</code>?</strong><br>
+        The Snowpark local testing emulator does not support raw SQL execution via
+        <code>session.sql()</code>. Any code that uses it will work in Snowflake but
+        fail in unit tests. The DataFrame API (<code>.delete()</code>, <code>.count()</code>,
+        <code>.write.mode("append")</code>) is fully emulated — keep business logic in the API.
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <h2 class="reveal">Step 4 — Layer 2: AppTest for the UI (RED → GREEN)</h2>
+
+  <div class="reveal">
+    <p>
+      Five new tests in <code>tests/unit/test_app.py</code> drive the Streamlit side.
+      The first three are straightforward; the fourth uncovers a non-obvious
+      <code>@st.dialog</code> gotcha.
+    </p>
+
+    <h3>Test 1 — purge button is present</h3>
+    <div class="code-block">
+      <div class="code-block-header"><span>tests/unit/test_app.py</span><button class="copy-btn">Copy</button></div>
+      <pre>def test_purge_button_present(snowpark_app):
+    """'Purge orders' button must be visible in the Danger Zone expander."""
+    at, _ = snowpark_app
+    assert not at.exception
+    purge_buttons = [b for b in at.button if "Purge" in b.label]
+    assert len(purge_buttons) == 1</pre>
+    </div>
+    <p>
+      Run <code>make test</code> → RED (button doesn't exist in the app yet).
+      Add the <code>st.expander</code> + <code>st.button</code> to
+      <code>streamlit_app.py</code> → GREEN.
+    </p>
+
+    <h3>Test 2 — dialog opens on click</h3>
+    <div class="code-block">
+      <div class="code-block-header"><span>tests/unit/test_app.py</span><button class="copy-btn">Copy</button></div>
+      <pre>def test_purge_dialog_opens_on_button_click(snowpark_app):
+    at, sess = snowpark_app
+    purge_btn_idx = next(i for i, b in enumerate(at.button) if "Purge" in b.label)
+    with patch("lib.session.get_session", return_value=sess):
+        at.button[purge_btn_idx].click().run()
+    confirm_buttons = [b for b in at.button if "Confirm" in b.label]
+    assert len(confirm_buttons) == 1</pre>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <h2 class="reveal">Step 5 — The <code>@st.dialog</code> + AppTest gotcha</h2>
+
+  <div class="reveal">
+    <p>
+      Test 3 (full purge flow) fails in a non-obvious way. Understanding why
+      requires knowing how <code>@st.dialog</code> works internally.
+    </p>
+
+    <!-- Dialog flow diagram -->
+    <svg viewBox="0 0 680 100" fill="none" xmlns="http://www.w3.org/2000/svg"
+         style="width:100%;max-width:680px;margin:20px 0" role="img"
+         aria-label="@st.dialog fragment execution flow">
+      <g class="dialog-step">
+        <rect x="0" y="20" width="145" height="60" rx="8" fill="#161B22" stroke="#58A6FF" stroke-width="1.5"/>
+        <text x="72" y="46" text-anchor="middle" fill="#58A6FF" font-size="10" font-family="monospace">if st.button(</text>
+        <text x="72" y="60" text-anchor="middle" fill="#58A6FF" font-size="10" font-family="monospace">"🗑 Purge"):</text>
+        <text x="72" y="74" text-anchor="middle" fill="#8B949E" font-size="8">opener button</text>
+      </g>
+      <path d="M145 50 L185 50" stroke="#30363D" stroke-width="1.5" marker-end="url(#dfa)"/>
+      <g class="dialog-step">
+        <rect x="185" y="20" width="155" height="60" rx="8" fill="#161B22" stroke="#D29922" stroke-width="1.5"/>
+        <text x="262" y="46" text-anchor="middle" fill="#D29922" font-size="10" font-family="monospace">_confirm_purge_</text>
+        <text x="262" y="60" text-anchor="middle" fill="#D29922" font-size="10" font-family="monospace">dialog() called</text>
+        <text x="262" y="74" text-anchor="middle" fill="#8B949E" font-size="8">fragment renders</text>
+      </g>
+      <path d="M340 50 L380 50" stroke="#30363D" stroke-width="1.5" marker-end="url(#dfa)"/>
+      <g class="dialog-step">
+        <rect x="380" y="20" width="155" height="60" rx="8" fill="#161B22" stroke="#3FB950" stroke-width="1.5"/>
+        <text x="457" y="46" text-anchor="middle" fill="#3FB950" font-size="10" font-family="monospace">if col1.button(</text>
+        <text x="457" y="60" text-anchor="middle" fill="#3FB950" font-size="10" font-family="monospace">"Confirm purge"):</text>
+        <text x="457" y="74" text-anchor="middle" fill="#8B949E" font-size="8">confirm button</text>
+      </g>
+      <path d="M535 50 L570 50" stroke="#30363D" stroke-width="1.5" marker-end="url(#dfa)"/>
+      <g class="dialog-step">
+        <rect x="570" y="20" width="110" height="60" rx="8" fill="#11567F" stroke="#29B5E8" stroke-width="1.5"/>
+        <text x="625" y="46" text-anchor="middle" fill="#E6EDF3" font-size="10" font-family="monospace">purge_orders()</text>
+        <text x="625" y="60" text-anchor="middle" fill="#E6EDF3" font-size="10" font-family="monospace">+ st.rerun()</text>
+        <text x="625" y="74" text-anchor="middle" fill="#A5D6FF" font-size="8">rows deleted</text>
+      </g>
+      <defs>
+        <marker id="dfa" markerWidth="7" markerHeight="7" refX="5" refY="2.5" orient="auto">
+          <path d="M0,0 L0,5 L7,2.5 z" fill="#30363D"/>
+        </marker>
+      </defs>
+    </svg>
+
+    <p>
+      The critical constraint: <strong>the dialog function is only called when its opener
+      button is <code>True</code> in the same script run.</strong> If you click
+      "Confirm purge" in a separate <code>.run()</code>, the opener button is <code>False</code>,
+      the dialog function is never entered, and "Confirm purge" is never rendered — so the
+      click does nothing.
+    </p>
+
+    <div class="warn">
+      <span class="note-icon">⚠️</span>
+      <div>
+        <strong>Broken pattern:</strong> clicking the two buttons in separate runs<br>
+        <code>at.button[purge_idx].click().run()   # opens dialog</code><br>
+        <code>at.button[confirm_idx].click().run() # does nothing — dialog not rendered!</code>
+      </div>
+    </div>
+
+    <div class="tip">
+      <span class="note-icon">💡</span>
+      <div>
+        <strong>Working pattern — dual-click before a single <code>.run()</code></strong><br>
+        Mark both buttons as clicked, then call <code>.run()</code> once. The script
+        processes the opener (True) → dialog is called → confirm (True) →
+        <code>purge_orders()</code> runs → <code>st.rerun()</code> fires.
+      </div>
+    </div>
+  </div>
+
+  <div class="reveal">
+    <div class="code-block">
+      <div class="code-block-header"><span>tests/unit/test_app.py — dual-click pattern</span><button class="copy-btn">Copy</button></div>
+      <pre>def test_purge_dialog_confirm_empties_orders_and_shows_success(snowpark_app):
+    """Full purge flow: seed → Purge+Confirm dual-click → ORDERS empty + success.
+
+    @st.dialog creates a fragment that only renders when its opener button
+    is clicked in the SAME script run. AppTest solution: mark BOTH buttons
+    (Purge orders + Confirm purge) as clicked before calling .run().
+    """
+    at, sess = snowpark_app
+    # Seed 500 rows via the "Run ingestion" button
+    with patch("lib.session.get_session", return_value=sess):
+        at.button[0].click().run()
+    assert sess.table(_cfg.ORDERS_TABLE).count() == 500
+
+    # Open the dialog to discover the confirm button index
+    purge_btn_idx = next(i for i, b in enumerate(at.button) if "Purge" in b.label)
+    with patch("lib.session.get_session", return_value=sess):
+        at.button[purge_btn_idx].click().run()
+    confirm_btn_idx = next(i for i, b in enumerate(at.button) if "Confirm" in b.label)
+
+    # Dual-click: mark both as clicked, then single at.run()
+    at.button[purge_btn_idx].click()    # mark Purge as clicked  (no .run() yet)
+    at.button[confirm_btn_idx].click()  # mark Confirm as clicked (no .run() yet)
+    with patch("lib.session.get_session", return_value=sess):
+        at.run()  # single run with BOTH buttons True
+
+    assert not at.exception
+    assert len(at.success) >= 1
+    assert "500" in at.success[-1].value
+    assert sess.table(_cfg.ORDERS_TABLE).count() == 0</pre>
+    </div>
+  </div>
+
+  <div class="reveal">
+    <div class="note">
+      <span class="note-icon">💡</span>
+      <div>
+        <strong><code>click()</code> returns the button element, not <code>AppTest</code>.</strong>
+        Chaining <code>at.button[i].click().button[j].click()</code> raises
+        <code>AttributeError: button</code>. Call <code>.click()</code> on each button
+        via <code>at.button[i]</code> separately, then call <code>at.run()</code> once.
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <h2 class="reveal">Step 6 — Cancel and error-path tests</h2>
+
+  <div class="reveal">
+    <p>
+      After the confirm test passes, coverage drops to 96 %: the cancel handler
+      and the error display path are untested. Two more tests close the gap.
+    </p>
+
+    <h3>Cancel button — ORDERS unchanged</h3>
+    <div class="code-block">
+      <div class="code-block-header"><span>tests/unit/test_app.py</span><button class="copy-btn">Copy</button></div>
+      <pre>def test_purge_dialog_cancel_closes_dialog(snowpark_app):
+    """Cancel button closes dialog without purging data."""
+    at, sess = snowpark_app
+    with patch("lib.session.get_session", return_value=sess):
+        at.button[0].click().run()
+    assert sess.table(_cfg.ORDERS_TABLE).count() == 500
+
+    purge_btn_idx = next(i for i, b in enumerate(at.button) if "Purge" in b.label)
+    with patch("lib.session.get_session", return_value=sess):
+        at.button[purge_btn_idx].click().run()
+    cancel_btn_idx = next(i for i, b in enumerate(at.button) if b.label == "Cancel")
+
+    at.button[purge_btn_idx].click()
+    at.button[cancel_btn_idx].click()
+    with patch("lib.session.get_session", return_value=sess):
+        at.run()
+
+    assert not at.exception
+    assert sess.table(_cfg.ORDERS_TABLE).count() == 500  # unchanged</pre>
+    </div>
+
+    <h3>Error path — <code>purge_orders()</code> raises</h3>
+    <div class="code-block">
+      <div class="code-block-header"><span>tests/unit/test_app.py</span><button class="copy-btn">Copy</button></div>
+      <pre>def test_purge_dialog_shows_error_on_failure(snowpark_app):
+    """When purge_orders() raises, _purge_error shown via st.error."""
+    at, sess = snowpark_app
+    purge_btn_idx = next(i for i, b in enumerate(at.button) if "Purge" in b.label)
+    with patch("lib.session.get_session", return_value=sess):
+        at.button[purge_btn_idx].click().run()
+    confirm_btn_idx = next(i for i, b in enumerate(at.button) if "Confirm" in b.label)
+
+    with patch("lib.ingest.purge_orders", side_effect=RuntimeError("disk full")):
+        at.button[purge_btn_idx].click()
+        at.button[confirm_btn_idx].click()
+        with patch("lib.session.get_session", return_value=sess):
+            at.run()
+
+    assert not at.exception
+    assert len(at.error) >= 1
+    assert "disk full" in at.error[-1].value</pre>
+    </div>
+    <div class="note">
+      <span class="note-icon">💡</span>
+      <div>
+        This is the one justified use of <code>unittest.mock.patch</code> on
+        business logic: testing a controlled failure mode that the emulator
+        can't trigger naturally.
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <h2 class="reveal">Step 7 — The full UI implementation</h2>
+
+  <div class="reveal">
+    <p>The <code>streamlit_app.py</code> additions that make all five UI tests pass:</p>
+    <div class="code-block">
+      <div class="code-block-header"><span>app/streamlit_app.py — Danger Zone section</span><button class="copy-btn">Copy</button></div>
+      <pre>from lib.ingest import get_kpis, get_run_history, purge_orders, run_ingestion
+
+# ... (existing KPI + run history sections unchanged) ...
+
+# --- Danger Zone -------------------------------------------------------------
+
+@st.dialog("Confirm purge", icon="⚠️")
+def _confirm_purge_dialog() -> None:
+    """Modal confirmation before irreversible ORDERS deletion."""
+    st.warning("This will permanently delete **all rows** from the ORDERS table.")
+    st.caption("This action cannot be undone. The deletion will be logged to INGEST_LOG.")
+    col1, col2 = st.columns(2)
+    if col1.button("Confirm purge", type="primary", use_container_width=True):
+        try:
+            with st.spinner("Purging ORDERS..."):
+                rows_deleted = purge_orders(session)
+            st.session_state["_purge_result"] = rows_deleted
+        except Exception as exc:  # noqa: BLE001
+            st.session_state["_purge_error"] = str(exc)
+        st.rerun()
+    if col2.button("Cancel", use_container_width=True):
+        st.rerun()
+
+
+with st.expander("⚠️ Danger Zone", expanded=False):
+    st.caption("Irreversible operations — use with care.")
+    if st.button("🗑 Purge orders", type="secondary",
+                 help="Delete all rows from the ORDERS table"):
+        _confirm_purge_dialog()
+
+# Surface purge result / error after the dialog closes and the app reruns.
+# No st.rerun() here — KPIs are already refreshed by the dialog's own rerun.
+if "_purge_result" in st.session_state:
+    rows = st.session_state.pop("_purge_result")
+    st.success(f"ORDERS purged — {rows:,} rows deleted.")
+
+if "_purge_error" in st.session_state:
+    err = st.session_state.pop("_purge_error")
+    st.error(f"Purge failed: {err}")</pre>
+    </div>
+  </div>
+
+  <div class="reveal">
+    <div class="note">
+      <span class="note-icon">💡</span>
+      <div>
+        <strong>Why no second <code>st.rerun()</code> after the success message?</strong>
+        The dialog calls <code>st.rerun()</code> itself after setting
+        <code>_purge_result</code>. The full app reruns, KPIs refresh, and the
+        success message is displayed. Adding a second <code>st.rerun()</code> would
+        erase the success message before AppTest captures the final state.
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <h2 class="reveal">Step 8 — Verify locally</h2>
+
+  <div class="reveal">
+    <div class="code-block">
+      <div class="code-block-header"><span>bash — final test run</span><button class="copy-btn">Copy</button></div>
+      <pre>make test
+# ──────────────────────────────────────────────
+# Name                   Stmts   Miss  Cover
+# ──────────────────────────────────────────────
+# app/lib/__init__.py        0      0   100%
+# app/lib/config.py          5      0   100%
+# app/lib/ingest.py         50      0   100%
+# app/lib/session.py        12      0   100%
+# app/streamlit_app.py      60      0   100%
+# ──────────────────────────────────────────────
+# TOTAL                    127      0   100%
+# Required test coverage of 80% reached. Total coverage: 100.00%
+# ============================== 46 passed in 3.08s</pre>
+    </div>
+
+    <p>
+      Run the app locally and confirm the UI:
+    </p>
+    <div class="code-block">
+      <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
+      <pre>scripts/20_run-local.sh -c oregon-sedemo
+# Open http://localhost:8501
+# → scroll down → "⚠️ Danger Zone" expander
+# → click "🗑 Purge orders" → modal appears
+# → click "Confirm purge" → success banner + KPIs reset to 0</pre>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <h2 class="reveal">Step 9 — Commit, push, CI, deploy</h2>
+
+  <div class="reveal">
+    <p>
+      All tests green. Pre-commit hooks run automatically on commit;
+      CI runs unit tests and deploys to SiS on push to main.
+    </p>
+    <div class="code-block">
+      <div class="code-block-header"><span>bash — ship it</span><button class="copy-btn">Copy</button></div>
+      <pre>git add app/lib/ingest.py app/streamlit_app.py \
+        tests/unit/test_ingest.py tests/unit/test_app.py
+
+git commit -m "feat: add Purge Orders button with @st.dialog confirmation and INGEST_LOG audit
+
+- purge_orders(session) uses DataFrame.delete() — Snowpark API, emulator-compatible
+- @st.dialog modal: dual-click pattern required in AppTest (opener + confirm same run)
+- INGEST_LOG audit entry: PROC_NAME=PURGE_ORDERS, STATUS=SUCCESS, ROWS_LOADED=deleted
+- 9 new tests (4 ingest layer + 5 UI layer), 100% coverage maintained"
+
+git push   # CI: unit-tests → deploy-to-sis → live in ~90s</pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-block-header"><span>bash — monitor CI</span><button class="copy-btn">Copy</button></div>
+      <pre>gh run list --limit 3
+# ✓  feat: add Purge Orders button ...  CI  push  2m15s ago  completed  success</pre>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <h2 class="reveal">What we learned</h2>
+
+  <div class="reveal">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin:1rem 0">
+      <thead>
+        <tr style="border-bottom:1px solid #30363D">
+          <th style="text-align:left;padding:.4rem .6rem;color:#8B949E">Topic</th>
+          <th style="text-align:left;padding:.4rem .6rem;color:#8B949E">Lesson</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid #21262D">
+          <td style="padding:.4rem .6rem;color:#E6EDF3"><code>DataFrame.delete()</code></td>
+          <td style="padding:.4rem .6rem;color:#8B949E">The Snowpark API for row deletion; works in the local emulator. Never use <code>session.sql("TRUNCATE")</code> in code that must be unit-tested.</td>
+        </tr>
+        <tr style="border-bottom:1px solid #21262D">
+          <td style="padding:.4rem .6rem;color:#E6EDF3"><code>@st.dialog</code> + AppTest</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">The dialog function only runs when its opener button is <code>True</code> in the same script run. Use the dual-click pattern: click both buttons, then call <code>.run()</code> once.</td>
+        </tr>
+        <tr style="border-bottom:1px solid #21262D">
+          <td style="padding:.4rem .6rem;color:#E6EDF3"><code>click()</code> return type</td>
+          <td style="padding:.4rem .6rem;color:#8B949E"><code>Button.click()</code> returns the <code>Button</code> element, not <code>AppTest</code>. Do not chain <code>.button[i].click().button[j]</code>.</td>
+        </tr>
+        <tr style="border-bottom:1px solid #21262D">
+          <td style="padding:.4rem .6rem;color:#E6EDF3">Second <code>st.rerun()</code></td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Don't add a second <code>st.rerun()</code> after showing the success message — the dialog's own rerun already refreshed the KPIs, and a second one erases the message before AppTest captures it.</td>
+        </tr>
+        <tr>
+          <td style="padding:.4rem .6rem;color:#E6EDF3">Mock inventory</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">The only justified mock on business logic is the error-path test: one <code>patch("lib.ingest.purge_orders", side_effect=RuntimeError(...))</code> for a failure mode the emulator can't trigger naturally.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ================================================================ -->
+  <h2 class="reveal">Test count summary</h2>
+
+  <div class="reveal">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin:1rem 0">
+      <thead>
+        <tr style="border-bottom:1px solid #30363D">
+          <th style="text-align:left;padding:.4rem .6rem;color:#8B949E">File</th>
+          <th style="text-align:right;padding:.4rem .6rem;color:#8B949E">Before</th>
+          <th style="text-align:right;padding:.4rem .6rem;color:#8B949E">After</th>
+          <th style="text-align:left;padding:.4rem .6rem;color:#8B949E">New tests</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid #21262D">
+          <td style="padding:.4rem .6rem;font-family:monospace;color:#E6EDF3">tests/unit/test_ingest.py</td>
+          <td style="text-align:right;padding:.4rem .6rem;color:#8B949E">16</td>
+          <td style="text-align:right;padding:.4rem .6rem;color:#3FB950">20</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">empties table, returns count, logs event, empty-table-returns-zero</td>
+        </tr>
+        <tr style="border-bottom:1px solid #21262D">
+          <td style="padding:.4rem .6rem;font-family:monospace;color:#E6EDF3">tests/unit/test_app.py</td>
+          <td style="text-align:right;padding:.4rem .6rem;color:#8B949E">21</td>
+          <td style="text-align:right;padding:.4rem .6rem;color:#3FB950">26</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">button present, dialog opens, confirm purge, cancel, error path</td>
+        </tr>
+        <tr style="font-weight:600">
+          <td style="padding:.4rem .6rem;color:#E6EDF3">Total unit tests</td>
+          <td style="text-align:right;padding:.4rem .6rem;color:#8B949E">37</td>
+          <td style="text-align:right;padding:.4rem .6rem;color:#3FB950">46</td>
+          <td style="padding:.4rem .6rem;color:#3FB950">100 % coverage maintained · ~3s</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="card-grid reveal">
+    <a class="card" href="index.html">
+      <div class="card-icon">🏠</div>
+      <h4>Back to Overview</h4>
+      <p>Architecture diagram and chapter index.</p>
+    </a>
+    <a class="card" href="02-local-dev.html">
+      <div class="card-icon">🖥️</div>
+      <h4>Local Dev &amp; TDD</h4>
+      <p>The session seam, test pyramid, and mock inventory principle.</p>
+    </a>
+    <a class="card" href="05-cicd.html">
+      <div class="card-icon">🚀</div>
+      <h4>CI/CD</h4>
+      <p>Pre-commit hooks and GitHub Actions auto-deploy.</p>
+    </a>
+  </div>
+
+  <!-- Footer -->
+  <footer class="page-footer">
+    <a id="btn-prev" class="nav-btn" href="05-cicd.html">
+      ← <span><span class="nav-btn-label">Previous</span><span class="nav-btn-title">CI/CD</span></span>
+    </a>
+    <span class="footer-center">Chapter 6 of 6 · End of tutorial</span>
+    <a id="btn-next" class="nav-btn" href="index.html">
+      <span><span class="nav-btn-label">Start over</span><span class="nav-btn-title">Overview</span></span> →
+    </a>
+  </footer>
+</main>
+
+<script src="assets/main.js"></script>
+</body>
+</html>

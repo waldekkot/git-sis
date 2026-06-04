@@ -47,7 +47,7 @@
     git-sis
   </a>
   <span class="nav-chapter">Chapter 2 — Local Dev</span>
-  <span class="nav-pill">3 / 6</span>
+  <span class="nav-pill">3 / 7</span>
 </nav>
 <div class="progress-bar"><div class="progress-fill" style="width:40%"></div></div>
 
@@ -181,7 +181,7 @@ SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo \
       <g class="tier-1">
         <polygon points="140,150 360,150 420,200 80,200" fill="rgba(63,185,80,.2)" stroke="#3FB950" stroke-width="1.5"/>
         <text x="250" y="178" text-anchor="middle" fill="#3FB950" font-size="12" font-weight="600">Unit Tests</text>
-        <text x="250" y="194" text-anchor="middle" fill="#8B949E" font-size="9">37 tests · no Snowflake · ~2s</text>
+        <text x="250" y="194" text-anchor="middle" fill="#8B949E" font-size="9">46 tests · no Snowflake · ~3s</text>
       </g>
     </svg>
   </div>
@@ -189,7 +189,7 @@ SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo \
   <div class="reveal">
     <div class="code-block">
       <div class="code-block-header"><span>bash — run tests</span><button class="copy-btn">Copy</button></div>
-      <pre># TDD inner loop: unit tests (Snowpark local testing + AppTest, ~2s, 100% coverage)
+      <pre># TDD inner loop: unit tests (Snowpark local testing + AppTest, ~3s, 100% coverage)
 # Ref: https://docs.snowflake.com/en/developer-guide/snowpark/python/testing-locally
 # Ref: https://docs.streamlit.io/develop/api-reference/app-testing
 make test                                     # or: uv run pytest tests/unit/ -v
@@ -231,8 +231,8 @@ make test-live
       <tbody>
         <tr style="border-bottom:1px solid #21262D">
           <td style="padding:.4rem;color:#E6EDF3">Snowpark session backend</td>
-          <td style="padding:.4rem;font-family:monospace;color:#58A6FF">seeded_session fixture</td>
-          <td style="padding:.4rem;color:#8B949E">Real DataFrames, real rows, no credentials</td>
+          <td style="padding:.4rem;font-family:monospace;color:#58A6FF">_module_session + seeded_session</td>
+          <td style="padding:.4rem;color:#8B949E">One emulator per module, tables wiped per test</td>
         </tr>
         <tr style="border-bottom:1px solid #21262D">
           <td style="padding:.4rem;color:#E6EDF3">UUID_STRING built-in</td>
@@ -314,14 +314,29 @@ def _mock_uniform(start, end, gen) -> ColumnEmulator: ...
 @patch(sf_round)
 def _mock_round(value, scale=0) -> ColumnEmulator: ...
 
+# ── Module-scoped session: ONE emulator per test module (~30 ms) ──────
+# Creates the session + tables once for all tests in the module.
+# seeded_session (function-scoped) truncates tables between tests (~2 ms)
+# instead of recreating the session per test (~30 ms each).
+# This cut setup overhead from ~1.4 s to ~0.1 s across 46 tests.
+@pytest.fixture(scope="module")
+def _module_session(request) -> Session:
+    """One session per module — emulator (local) or real Snowflake (live)."""
+    if request.config.getoption("--snowflake-session", default="local") == "local":
+        sess = Session.builder.config("local_testing", True).create()
+        sess.create_dataframe([], LOG_SCHEMA).write.save_as_table(_cfg.INGEST_LOG_TABLE)
+        sess.create_dataframe([], ORDERS_SCHEMA).write.save_as_table(_cfg.ORDERS_TABLE)
+        yield sess
+        sess.close()
+    else:  # live: real Snowflake, disposable schema per module
+        ...
+
 @pytest.fixture()
-def seeded_session() -> Session:
-    """Fresh emulator with empty ORDERS + INGEST_LOG tables."""
-    sess = Session.builder.config("local_testing", True).create()
-    sess.create_dataframe([], LOG_SCHEMA).write.save_as_table(_cfg.INGEST_LOG_TABLE)
-    sess.create_dataframe([], ORDERS_SCHEMA).write.save_as_table(_cfg.ORDERS_TABLE)
-    yield sess
-    sess.close()
+def seeded_session(request, _module_session) -> Session:
+    """Wipe both tables before each test, reusing the module session."""
+    _module_session.table(_cfg.ORDERS_TABLE).delete()
+    _module_session.table(_cfg.INGEST_LOG_TABLE).delete()
+    yield _module_session
 
 @pytest.fixture()
 def uuid_patch():
@@ -329,6 +344,15 @@ def uuid_patch():
     with mock_patch("lib.ingest.call_function",
                     side_effect=lambda _: lit(str(uuid.uuid4()))):
         yield</pre>
+    </div>
+    <div class="note">
+      <span class="note-icon">💡</span>
+      <div>
+        <code>_module_session</code> is the key performance fix: <code>Session.builder…create()</code>
+        costs ~30 ms. With 46 function-scoped tests that would be ~1.4 s of pure fixture
+        overhead. Two module-scoped sessions cost ~60 ms. Tables are wiped with
+        <code>.delete()</code> (~2 ms) between tests — the same DataFrame API used in production.
+      </div>
     </div>
   </div>
 
@@ -349,8 +373,10 @@ INGEST_LOG_TABLE = f"{SCHEMA_FQN}.INGEST_LOG"</pre>
 
     <p>
       Integration tests set <code>GIT_SIS_SCHEMA=SNOWFLAKE_LEARNING_DB.GIT_SIS_TEST_&lt;uuid&gt;</code>
-      before importing, so they never touch production data. The temp schema is dropped automatically
-      after the test session.
+      per test (function-scoped schema), so they never touch production data and can run
+      in parallel with <code>pytest-xdist</code>. Each schema is dropped automatically
+      after the test. Live unit tests use the same module-scoped pattern with a shared
+      temp schema per test module.
     </p>
 
     <div class="warn">
@@ -369,7 +395,7 @@ INGEST_LOG_TABLE = f"{SCHEMA_FQN}.INGEST_LOG"</pre>
     <a id="btn-prev" class="nav-btn" href="01-setup.html">
       ← <span><span class="nav-btn-label">Previous</span><span class="nav-btn-title">Setup</span></span>
     </a>
-    <span class="footer-center">Chapter 2 of 5</span>
+    <span class="footer-center">Chapter 2 of 6</span>
     <a id="btn-next" class="nav-btn primary" href="03-github.html">
       <span><span class="nav-btn-label">Next</span><span class="nav-btn-title">GitHub</span></span> →
     </a>

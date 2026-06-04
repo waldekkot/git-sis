@@ -27,11 +27,14 @@
     .svg-anim .push-event { animation: event-flash 1.8s ease-in-out infinite; }
     .svg-anim .job-1 { animation: job-activate .5s ease forwards .6s; }
     .svg-anim .job-2 { animation: job-activate .5s ease forwards 1.4s; }
+    .svg-anim .job-3 { animation: job-activate .5s ease forwards 2.2s; }
     .svg-anim .pipe-1 { stroke-dasharray: 100; stroke-dashoffset: 100; animation: pipe-draw .6s ease forwards .3s; }
     .svg-anim .pipe-2 { stroke-dasharray: 100; stroke-dashoffset: 100; animation: pipe-draw .6s ease forwards 1.1s; }
     .svg-anim .pipe-3 { stroke-dasharray: 100; stroke-dashoffset: 100; animation: pipe-draw .6s ease forwards 1.9s; }
+    .svg-anim .pipe-4 { stroke-dasharray: 100; stroke-dashoffset: 100; animation: pipe-draw .6s ease forwards 2.7s; }
     .svg-anim .check-1 { transform: scale(0); animation: check-pop .3s ease forwards 1.2s; }
-    .svg-anim .check-2 { transform: scale(0); animation: check-pop .3s ease forwards 2.5s; }
+    .svg-anim .check-2 { transform: scale(0); animation: check-pop .3s ease forwards 2.0s; }
+    .svg-anim .check-3 { transform: scale(0); animation: check-pop .3s ease forwards 2.8s; }
 
     /* ── Pre-commit hook sequence ────────────────────────────────── */
     @keyframes hook-pass {
@@ -56,7 +59,7 @@
     git-sis
   </a>
   <span class="nav-chapter">Chapter 5 — CI/CD</span>
-  <span class="nav-pill">6 / 6</span>
+  <span class="nav-pill">6 / 7</span>
 </nav>
 <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
 
@@ -68,55 +71,72 @@
 
   <!-- CI pipeline SVG -->
   <div class="diagram-wrap reveal">
-    <svg class="svg-anim" viewBox="0 0 640 165" fill="none" xmlns="http://www.w3.org/2000/svg"
-         style="width:100%;max-width:640px" role="img" aria-label="GitHub Actions CI/CD pipeline">
+    <svg class="svg-anim" viewBox="0 0 790 175" fill="none" xmlns="http://www.w3.org/2000/svg"
+         style="width:100%;max-width:790px" role="img" aria-label="GitHub Actions CI/CD pipeline">
 
       <!-- Push event -->
-      <rect class="push-event" x="10" y="55" width="105" height="60" rx="8"
+      <rect class="push-event" x="5" y="55" width="88" height="60" rx="8"
             fill="#21262D" stroke="#58A6FF" stroke-width="1.5"/>
-      <text x="63" y="80" text-anchor="middle" fill="#58A6FF" font-size="20">⬆</text>
-      <text x="63" y="98" text-anchor="middle" fill="#E6EDF3" font-size="10" font-weight="600">git push</text>
-      <text x="63" y="111" text-anchor="middle" fill="#8B949E" font-size="8">→ main</text>
+      <text x="49" y="80" text-anchor="middle" fill="#58A6FF" font-size="20">⬆</text>
+      <text x="49" y="98" text-anchor="middle" fill="#E6EDF3" font-size="10" font-weight="600">git push</text>
+      <text x="49" y="111" text-anchor="middle" fill="#8B949E" font-size="8">→ main</text>
 
       <!-- Pipe 1 -->
-      <path class="pipe-1" d="M115 85 L165 85" stroke="#58A6FF" stroke-width="1.5" marker-end="url(#acicd)"/>
+      <path class="pipe-1" d="M93 85 L125 85" stroke="#58A6FF" stroke-width="1.5" marker-end="url(#acicd)"/>
 
-      <!-- Job: unit-tests -->
-      <rect class="job-1" x="165" y="42" width="160" height="90" rx="8" stroke="#30363D" stroke-width="1.5"/>
-      <text x="245" y="68" text-anchor="middle" fill="#8B949E" font-size="9">unit-tests</text>
-      <text x="245" y="85" text-anchor="middle" fill="#E6EDF3" font-size="11" font-weight="600">ruff check</text>
-      <text x="245" y="100" text-anchor="middle" fill="#E6EDF3" font-size="11" font-weight="600">pytest unit</text>
-      <text x="245" y="118" text-anchor="middle" fill="#8B949E" font-size="8">ubuntu-latest · ~15s</text>
+      <!-- Job 1: unit-tests -->
+      <rect class="job-1" x="125" y="42" width="140" height="90" rx="8" stroke="#30363D" stroke-width="1.5"/>
+      <text x="195" y="65" text-anchor="middle" fill="#8B949E" font-size="9">unit-tests</text>
+      <text x="195" y="82" text-anchor="middle" fill="#E6EDF3" font-size="11" font-weight="600">ruff check</text>
+      <text x="195" y="97" text-anchor="middle" fill="#E6EDF3" font-size="11" font-weight="600">pytest unit</text>
+      <text x="195" y="115" text-anchor="middle" fill="#8B949E" font-size="8">all pushes + PRs · ~15s</text>
 
       <!-- check mark for job-1 -->
       <g class="check-1">
-        <circle cx="308" cy="45" r="11" fill="#3FB950"/>
-        <text x="308" y="50" text-anchor="middle" fill="white" font-size="13">✓</text>
+        <circle cx="258" cy="45" r="11" fill="#3FB950"/>
+        <text x="258" y="50" text-anchor="middle" fill="white" font-size="13">✓</text>
       </g>
 
       <!-- Pipe 2 (needs: unit-tests) -->
-      <path class="pipe-2" d="M325 85 L375 85" stroke="#3FB950" stroke-width="1.5" marker-end="url(#acicd3)"/>
-      <text x="350" y="78" text-anchor="middle" fill="#8B949E" font-size="8">needs:</text>
+      <path class="pipe-2" d="M265 85 L298 85" stroke="#3FB950" stroke-width="1.5" marker-end="url(#acicd3)"/>
+      <text x="282" y="78" text-anchor="middle" fill="#8B949E" font-size="8">needs:</text>
 
-      <!-- Job: deploy-to-sis -->
-      <rect class="job-2" x="375" y="42" width="165" height="90" rx="8" stroke="#30363D" stroke-width="1.5"/>
-      <text x="458" y="68" text-anchor="middle" fill="#8B949E" font-size="9">deploy-to-sis</text>
-      <text x="458" y="85" text-anchor="middle" fill="#E6EDF3" font-size="11" font-weight="600">snow sql</text>
-      <text x="458" y="100" text-anchor="middle" fill="#E6EDF3" font-size="11" font-weight="600">scripts/deploy.sh</text>
-      <text x="458" y="118" text-anchor="middle" fill="#8B949E" font-size="8">main branch only</text>
+      <!-- Job 2: integration-tests -->
+      <rect class="job-2" x="298" y="42" width="158" height="90" rx="8" stroke="#30363D" stroke-width="1.5"/>
+      <text x="377" y="65" text-anchor="middle" fill="#8B949E" font-size="9">integration-tests</text>
+      <text x="377" y="82" text-anchor="middle" fill="#E6EDF3" font-size="11" font-weight="600">pytest integration</text>
+      <text x="377" y="97" text-anchor="middle" fill="#E6EDF3" font-size="10">real Snowflake · temp schema</text>
+      <text x="377" y="115" text-anchor="middle" fill="#8B949E" font-size="8">main only · ~12s</text>
 
       <!-- check mark for job-2 -->
       <g class="check-2">
-        <circle cx="523" cy="45" r="11" fill="#3FB950"/>
-        <text x="523" y="50" text-anchor="middle" fill="white" font-size="13">✓</text>
+        <circle cx="449" cy="45" r="11" fill="#3FB950"/>
+        <text x="449" y="50" text-anchor="middle" fill="white" font-size="13">✓</text>
       </g>
 
-      <!-- Pipe 3: to SiS icon -->
-      <path class="pipe-3" d="M540 85 L582 85" stroke="#29B5E8" stroke-width="1.5" marker-end="url(#acicd2)"/>
+      <!-- Pipe 3 (needs: integration-tests) -->
+      <path class="pipe-3" d="M456 85 L489 85" stroke="#3FB950" stroke-width="1.5" marker-end="url(#acicd3)"/>
+      <text x="473" y="78" text-anchor="middle" fill="#8B949E" font-size="8">needs:</text>
+
+      <!-- Job 3: deploy-to-sis -->
+      <rect class="job-3" x="489" y="42" width="152" height="90" rx="8" stroke="#30363D" stroke-width="1.5"/>
+      <text x="565" y="65" text-anchor="middle" fill="#8B949E" font-size="9">deploy-to-sis</text>
+      <text x="565" y="82" text-anchor="middle" fill="#E6EDF3" font-size="11" font-weight="600">snow streamlit</text>
+      <text x="565" y="97" text-anchor="middle" fill="#E6EDF3" font-size="11" font-weight="600">deploy</text>
+      <text x="565" y="115" text-anchor="middle" fill="#8B949E" font-size="8">main only · ~30s</text>
+
+      <!-- check mark for job-3 -->
+      <g class="check-3">
+        <circle cx="634" cy="45" r="11" fill="#3FB950"/>
+        <text x="634" y="50" text-anchor="middle" fill="white" font-size="13">✓</text>
+      </g>
+
+      <!-- Pipe 4: to SiS icon -->
+      <path class="pipe-4" d="M641 85 L678 85" stroke="#29B5E8" stroke-width="1.5" marker-end="url(#acicd2)"/>
 
       <!-- SiS result -->
-      <text x="610" y="81" text-anchor="middle" font-size="26">❄️</text>
-      <text x="610" y="105" text-anchor="middle" fill="#29B5E8" font-size="10" font-weight="600">Live</text>
+      <text x="706" y="81" text-anchor="middle" font-size="26">❄️</text>
+      <text x="706" y="105" text-anchor="middle" fill="#29B5E8" font-size="10" font-weight="600">Live</text>
 
       <defs>
         <marker id="acicd"  markerWidth="7" markerHeight="7" refX="5" refY="2.5" orient="auto">
@@ -153,7 +173,7 @@
       <text x="299" y="47" text-anchor="middle" fill="#8B949E"  font-size="9" font-family="monospace">app/lib/</text>
 
       <text x="479" y="30" text-anchor="middle" fill="#79C0FF"  font-size="9" font-family="monospace">pytest tests/unit/</text>
-      <text x="479" y="47" text-anchor="middle" fill="#3FB950"  font-size="9" font-family="monospace">37 tests · no SF · ~2s</text>
+      <text x="479" y="47" text-anchor="middle" fill="#3FB950"  font-size="9" font-family="monospace">46 tests · no SF · ~3s</text>
     </svg>
   </div>
 
@@ -206,7 +226,7 @@
         entry: uv run pytest tests/unit/ --tb=short -q
         language: system
         types: [python]
-        pass_filenames: false</pre>
+        pass_filenames: false  # 46 tests · ~3s</pre>
     </div>
   </div>
 
@@ -222,25 +242,53 @@
       <li>Implement the minimum code to pass</li>
       <li><code>make test</code> — green</li>
       <li>Refactor. <code>make test</code> stays green.</li>
-      <li><code>make test-full</code> — unit + integration against real Snowflake (≈60s)</li>
+      <li><code>make test-full</code> — unit + integration against real Snowflake (~15s total, parallel)</li>
       <li><code>git commit</code> — pre-commit gates run automatically</li>
-      <li><code>git push</code> — CI tests + SiS deploy fire automatically</li>
+      <li><code>git push</code> — CI fires: unit tests → integration tests (real Snowflake) → SiS deploy</li>
     </ol>
   </div>
 
-  <h2 class="reveal">Part B — GitHub Actions CICD</h2>
+  <h2 class="reveal">Part B — GitHub Actions CI/CD</h2>
 
   <div class="reveal">
     <p>
-      The <code>.github/workflows/ci.yml</code> has two jobs:
-      <strong>unit-tests</strong> (runs on every push and PR) and
-      <strong>deploy-to-sis</strong> (only on push to main, after unit-tests pass).
+      The <code>.github/workflows/ci.yml</code> has three jobs in sequence:
     </p>
-    <p>
-      The deploy job uses <code>scripts/30_deploy.sh</code> which runs
-      <code>snow streamlit deploy -p app/ --replace</code> (workspace-native).
-      CI checks out the code from GitHub itself — no GIT REPOSITORY FETCH needed.
-    </p>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin:1rem 0">
+      <thead>
+        <tr style="border-bottom:1px solid #30363D">
+          <th style="text-align:left;padding:.4rem .6rem;color:#8B949E">Job</th>
+          <th style="text-align:left;padding:.4rem .6rem;color:#8B949E">When</th>
+          <th style="text-align:left;padding:.4rem .6rem;color:#8B949E">What it validates</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid #21262D">
+          <td style="padding:.4rem .6rem;font-family:monospace;color:#E6EDF3">unit-tests</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Every push + every PR</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">DataFrame logic against the Snowpark emulator + ruff lint. No credentials needed.</td>
+        </tr>
+        <tr style="border-bottom:1px solid #21262D">
+          <td style="padding:.4rem .6rem;font-family:monospace;color:#E6EDF3">integration-tests</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Push to main only</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Same logic against the real Snowflake engine. Creates and drops a disposable <code>GIT_SIS_TEST_&lt;uuid&gt;</code> schema — never touches production data.</td>
+        </tr>
+        <tr>
+          <td style="padding:.4rem .6rem;font-family:monospace;color:#E6EDF3">deploy-to-sis</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Push to main only</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Deploys the app only after both test layers pass. Uses <code>scripts/30_deploy.sh</code> → <code>snow streamlit deploy</code>.</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="note">
+      <span class="note-icon">💡</span>
+      <div>
+        <strong>Why integration tests only on main?</strong> PRs (especially from forks) don't
+        have access to the <code>SF_PAT_TOKEN</code> GitHub Secret, and running real Snowflake
+        compute on every PR adds cost and latency. Unit tests give fast feedback on PRs;
+        integration tests are the final gate before production deploy.
+      </div>
+    </div>
   </div>
 
   <div class="reveal">
@@ -275,24 +323,53 @@ on:
 jobs:
   unit-tests:
     name: Unit tests + lint (no Snowflake)
+    # Runs on every push and every PR — no credentials required.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
-        with: { version: "latest" }
+        with: { version: "latest", enable-cache: true, cache-dependency-glob: "uv.lock" }
       - run: uv sync
       - run: uv run pytest tests/unit/ -v --tb=short
       - run: uv run ruff check app/
 
-  deploy-to-sis:
-    name: Deploy to SiS (main only)
+  integration-tests:
+    name: Integration tests (real Snowflake)
+    # Runs after unit tests pass, on push to main only.
+    # Creates and drops a disposable GIT_SIS_TEST_<uuid> schema.
     runs-on: ubuntu-latest
     needs: unit-tests
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
-        with: { version: "latest" }
+        with: { version: "latest", enable-cache: true, cache-dependency-glob: "uv.lock" }
+      - run: uv sync
+      - name: Configure Snowflake CI connection
+        run: |
+          echo "$SF_PAT_TOKEN" > /tmp/sf_token.txt
+          mkdir -p ~/.snowflake
+          printf '[connections.ci]\naccount = "sfseeurope-wkot_demo1"\n\
+user = "wkot"\nauthenticator = "PROGRAMMATIC_ACCESS_TOKEN"\n\
+token_file_path = "/tmp/sf_token.txt"\n' > ~/.snowflake/config.toml
+          chmod 0600 ~/.snowflake/config.toml
+        env: { SF_PAT_TOKEN: "${{ secrets.SF_PAT_TOKEN }}" }
+      - name: Run integration tests
+        # Each test gets its own GIT_SIS_TEST_<uuid> schema (function-scoped).
+        # -n 5: 5 workers run schemas in parallel, cutting ~60s → ~12s.
+        run: uv run pytest tests/integration/ -v --tb=short --no-cov -n 5
+        env: { SNOWFLAKE_DEFAULT_CONNECTION_NAME: ci }
+
+  deploy-to-sis:
+    name: Deploy to SiS (main only)
+    # Deploys only after BOTH unit and integration tests pass.
+    runs-on: ubuntu-latest
+    needs: integration-tests
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with: { version: "latest", enable-cache: true, cache-dependency-glob: "uv.lock" }
       - run: uv tool install snowflake-cli
       - name: Configure Snowflake CI connection
         run: |
@@ -302,10 +379,8 @@ jobs:
 user = "wkot"\nauthenticator = "PROGRAMMATIC_ACCESS_TOKEN"\n\
 token_file_path = "/tmp/sf_token.txt"\n' > ~/.snowflake/config.toml
           chmod 0600 ~/.snowflake/config.toml
-        env:
-          SF_PAT_TOKEN: ${{ secrets.SF_PAT_TOKEN }}
+        env: { SF_PAT_TOKEN: "${{ secrets.SF_PAT_TOKEN }}" }
       - name: Deploy to Snowflake SiS
-        # Workspace-native: uploads app/ via snow streamlit deploy
         run: scripts/30_deploy.sh -c ci</pre>
     </div>
   </div>
@@ -345,9 +420,9 @@ token_file_path = "/tmp/sf_token.txt"\n' > ~/.snowflake/config.toml
     <a id="btn-prev" class="nav-btn" href="04-deploy.html">
       ← <span><span class="nav-btn-label">Previous</span><span class="nav-btn-title">Deploy to SiS</span></span>
     </a>
-    <span class="footer-center">Chapter 5 of 5 · End of tutorial</span>
-    <a id="btn-next" class="nav-btn" href="index.html">
-      <span><span class="nav-btn-label">Start over</span><span class="nav-btn-title">Overview</span></span> →
+    <span class="footer-center">Chapter 5 of 6</span>
+    <a id="btn-next" class="nav-btn primary" href="06-purge-feature.html">
+      <span><span class="nav-btn-label">Next</span><span class="nav-btn-title">Adding a Feature</span></span> →
     </a>
   </footer>
 </main>

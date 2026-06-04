@@ -12,7 +12,7 @@ VERSION=$(grep -m1 '^version' "$_ROOT_DIR/pyproject.toml" | grep -o '"[^"]*"' | 
 SCRIPT_NAME="$(basename "${BASH_SOURCE[1]:-$0}")"
 
 # ---- Default Snowflake connection -------------------------------------------
-CONN="${SNOWFLAKE_DEFAULT_CONNECTION_NAME:-oregon-sedemo}"
+CONN="${SNOWFLAKE_DEFAULT_CONNECTION_NAME:-default}"
 
 # ---- Shared option parsers --------------------------------------------------
 handle_version() {

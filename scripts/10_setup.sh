@@ -58,9 +58,9 @@ EXAMPLES
     scripts/10_setup.sh --with-git
 
     # After setup, create the GitHub PAT secret (run once):
-    snow sql -c oregon-sedemo -q "
+    snow sql -c <your-conn> -q "
       CREATE OR REPLACE SECRET GIT_SIS_INFRA.SECRETS.GITHUB_PAT
-          TYPE = PASSWORD USERNAME = 'waldekkot' PASSWORD = '<pat>';"
+          TYPE = PASSWORD USERNAME = '<github_user>' PASSWORD = '<pat>';"
 
 NEXT STEP
     scripts/20_run-local.sh   -- verify the app works locally

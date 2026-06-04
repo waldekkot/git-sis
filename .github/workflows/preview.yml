@@ -1,0 +1,127 @@
+# PR Preview — deploy an isolated Streamlit app for every pull request
+#
+# On every PR open/update:
+#   1. Runs unit tests (same as ci.yml, no Snowflake required).
+#   2. For non-fork PRs (secrets available): deploys a preview app to an
+#      isolated schema GIT_SIS_PR_<pr_number> and posts the URL as a comment.
+#
+# On PR close (see preview-cleanup.yml): the preview schema is dropped.
+#
+# Prerequisites:
+#   - SF_PAT_TOKEN GitHub Secret with CREATE SCHEMA + CREATE STREAMLIT
+#     in SNOWFLAKE_LEARNING_DB.
+#   - OIDC upgrade: replace setup-snowflake action with
+#     snowflake-cli-action use-oidc: true (see docs/oidc-setup.md).
+
+name: PR Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  unit-tests:
+    name: Unit tests (no Snowflake)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - name: Install dependencies
+        run: uv sync
+      - name: Run unit tests
+        run: uv run pytest tests/unit/ -v --tb=short
+
+  preview-deploy:
+    name: Deploy PR preview
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    # Only on non-fork PRs — forks don't have access to repository secrets.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      PREVIEW_DB: SNOWFLAKE_LEARNING_DB
+      PREVIEW_SCHEMA: GIT_SIS_PR_${{ github.event.number }}
+      PREVIEW_APP: INGEST_CONSOLE_PR_${{ github.event.number }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - uses: snowflakedb/snowflake-cli-action@v2
+        with:
+          cli-version: "3.19"
+          default-config-file-path: ""   # config written by setup-snowflake below
+
+      - uses: ./.github/actions/setup-snowflake
+        with:
+          sf-pat-token: ${{ secrets.SF_PAT_TOKEN }}
+
+      - name: Create preview schema
+        run: |
+          snow sql -c ci -q "
+            USE DATABASE ${{ env.PREVIEW_DB }};
+            CREATE SCHEMA IF NOT EXISTS ${{ env.PREVIEW_SCHEMA }};"
+
+      - name: Deploy preview app
+        run: |
+          GIT_SIS_DATABASE=${{ env.PREVIEW_DB }} \
+          GIT_SIS_SCHEMA=${{ env.PREVIEW_SCHEMA }} \
+          GIT_SIS_APP_NAME=${{ env.PREVIEW_APP }} \
+              scripts/30_deploy.sh -c ci
+
+      - name: Get preview URL
+        id: url
+        run: |
+          APP_FQN="${{ env.PREVIEW_DB }}.${{ env.PREVIEW_SCHEMA }}.${{ env.PREVIEW_APP }}"
+          URL=$(snow streamlit get-url -c ci "$APP_FQN" 2>&1) || URL="(URL unavailable)"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Post preview URL to PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = [
+              '## Preview deployed',
+              '',
+              `**App:** \`${{ env.PREVIEW_APP }}\``,
+              `**Schema:** \`${{ env.PREVIEW_DB }}.${{ env.PREVIEW_SCHEMA }}\``,
+              `**URL:** ${{ steps.url.outputs.url }}`,
+              '',
+              '_This preview is automatically removed when the PR is closed._',
+            ].join('\n');
+
+            // Update existing comment if present, otherwise create a new one
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c =>
+              c.user.type === 'Bot' && c.body.includes('## Preview deployed')
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

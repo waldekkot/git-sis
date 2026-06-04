@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# 99_cleanup-infra.sh -- FULL teardown: drops GIT_SIS_INFRA database + GitHub PAT secret.
+# 99_cleanup-infra.sh -- FULL teardown: drops everything including API integration.
 #
-# WARNING: This also runs 90_cleanup first (idempotent), then drops the infra
-# database. The GitHub PAT is permanently deleted and must be re-entered on rebuild.
+# With Snowflake GitHub App OAuth2 there is no longer a separate infra database
+# or PAT secret to manage.  This script is now equivalent to 90_cleanup.sh
+# but retains the confirmation prompt as a safety gate for complete decommissioning.
 #
 # Only use when completely decommissioning the demo.
 #
@@ -11,7 +12,7 @@
 #
 # Options:
 #   -c, --connection NAME   Snowflake CLI connection
-#                           (default: $SNOWFLAKE_DEFAULT_CONNECTION_NAME or 'oregon-sedemo')
+#                           (default: $SNOWFLAKE_DEFAULT_CONNECTION_NAME or 'default')
 #       --yes               Skip the confirmation prompt
 #   -h, --help              Show this help text
 #       --version           Print version and exit
@@ -25,8 +26,11 @@ show_help() {
     cat <<EOF
 git-sis $VERSION -- 99_cleanup-infra
 
-FULL teardown: drops everything, including GIT_SIS_INFRA database and the
-GitHub PAT secret. This is the "nuclear option" for complete decommissioning.
+FULL teardown: drops everything -- GIT_SIS schema (CASCADE), STREAMLIT,
+GIT REPOSITORY, and the API integration (git_api_waldekkot).
+
+No separate infra database exists anymore: authentication uses the
+Snowflake GitHub App OAuth2 flow -- no PAT to delete.
 
 USAGE
     $(basename "$0") [OPTIONS]
@@ -38,18 +42,16 @@ OPTIONS
         --version           Print version and exit
 
 WHAT IS DROPPED
-    Everything from 90_cleanup.sh PLUS:
-    GIT_SIS_INFRA.SECRETS.GITHUB_PAT   (GitHub PAT credential)
-    GIT_SIS_INFRA.SECRETS              (schema)
-    GIT_SIS_INFRA                      (database)
+    SNOWFLAKE_LEARNING_DB.GIT_SIS.*  (schema CASCADE: tables, STREAMLIT, GIT REPOSITORY)
+    git_api_waldekkot                (API integration, ACCOUNTADMIN required)
 
 REBUILD AFTER THIS
-    scripts/10_setup.sh
-    snow sql -c <conn> -q "CREATE OR REPLACE SECRET GIT_SIS_INFRA.SECRETS.GITHUB_PAT ..."
+    scripts/10_setup.sh --with-git   # re-creates schema, tables, API integration
+    # Then authorize the Snowflake GitHub App in Snowsight (one-time per user)
     scripts/30_deploy.sh
 
-FOR NORMAL RESETS (keeps the PAT)
-    scripts/90_cleanup.sh
+FOR NORMAL RESETS
+    scripts/90_cleanup.sh   (same SQL, no confirmation prompt)
 EOF
 }
 
@@ -66,9 +68,8 @@ done
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
-warn "NUCLEAR: This drops GIT_SIS_INFRA database + GITHUB_PAT secret."
-warn "The PAT will need to be re-entered to rebuild the demo."
-warn "For a normal reset (keeping the PAT), use: scripts/90_cleanup.sh"
+warn "NUCLEAR: This drops GIT_SIS schema + API integration completely."
+warn "For a normal reset, use: scripts/90_cleanup.sh"
 
 if [[ "$SKIP_CONFIRM" == false ]]; then
     printf 'Type YES to confirm full teardown: '
@@ -76,11 +77,8 @@ if [[ "$SKIP_CONFIRM" == false ]]; then
     [[ "$CONFIRM" == "YES" ]] || die "Aborted. Nothing was dropped."
 fi
 
-info "Step 1/2 -- demo reset (connection: $CONN) ..."
+info "Full teardown (connection: $CONN) ..."
 snow sql -c "$CONN" -f "$ROOT_DIR/deploy/99_cleanup.sql"
 
-info "Step 2/2 -- infra database + PAT secret ..."
-snow sql -c "$CONN" -f "$ROOT_DIR/deploy/98_cleanup_infra.sql"
-
-success "Full teardown complete. GIT_SIS_INFRA has been dropped."
-info "To rebuild: scripts/10_setup.sh, then re-create GITHUB_PAT, then scripts/30_deploy.sh"
+success "Full teardown complete."
+info "To rebuild: scripts/10_setup.sh --with-git, authorize GitHub App in Snowsight, then scripts/30_deploy.sh"

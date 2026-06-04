@@ -33,17 +33,15 @@ app/                       # Streamlit app root
   lib/config.py            # table FQNs (env-overridable for test isolation)
   .streamlit/config.toml   # Snowflake theme
 deploy/
-  01_setup_infra.sql       # one-time: GIT_SIS_INFRA DB + SECRETS schema
   00_setup_env.sql         # idempotent: GIT_SIS schema + ORDERS + INGEST_LOG
-  10_git_and_streamlit.sql # optional: git wiring (API integration + GIT REPOSITORY)
-  98_cleanup_infra.sql     # nuclear teardown: drops GIT_SIS_INFRA + PAT secret
-  99_cleanup.sql           # reset: drops GIT_SIS schema (keeps GIT_SIS_INFRA)
+  10_git_and_streamlit.sql # optional: git wiring (OAuth2 API integration + GIT REPOSITORY)
+  99_cleanup.sql           # full teardown: drops GIT_SIS schema + API integration
 scripts/                   # numbered runners — logical step-by-step workflow
   10_setup.sh              # one-time env setup (--with-git for git wiring)
   20_run-local.sh          # local dev loop
   30_deploy.sh             # deploy to SiS via snow streamlit deploy
   40_verify.sh             # confirm app live + print URL (--open to launch browser)
-  90_cleanup.sh            # reset demo (keeps PAT secret)
+  90_cleanup.sh            # reset demo (drops GIT_SIS schema + API integration)
   99_cleanup-infra.sh      # full teardown (drops everything, --yes to skip prompt)
 tests/
   unit/                    # 37 tests, no Snowflake needed (CI) — 100% coverage
@@ -74,7 +72,7 @@ Code changes stay private until you deploy.
 
 ```bash
 # --- First-time setup ---
-scripts/10_setup.sh                           # infra DB + GIT_SIS schema + tables
+scripts/10_setup.sh                           # GIT_SIS schema + tables
 scripts/10_setup.sh --with-git               # also wire GIT REPOSITORY for workspace git-sync
 
 # --- Dev loop ---
@@ -90,25 +88,25 @@ scripts/40_verify.sh                          # show object status + URL
 scripts/40_verify.sh --open                   # open URL in browser
 
 # --- Cleanup ---
-scripts/90_cleanup.sh                         # reset demo (keeps infra DB + PAT)
+scripts/90_cleanup.sh                         # reset demo
 scripts/99_cleanup-infra.sh                   # full teardown (prompts for confirmation)
 scripts/99_cleanup-infra.sh --yes             # skip confirmation (for scripted use)
 ```
 
-## GitHub PAT secret (one-time, permanent)
+## GitHub App OAuth authorization (one-time, per user)
 
-The GitHub PAT lives in **`GIT_SIS_INFRA.SECRETS.GITHUB_PAT`** — a separate
-database that survives `90_cleanup.sh` resets. It is only needed if you use
-`--with-git` (workspace git-sync) or the legacy git-FROM deploy approach.
+When you use `--with-git` (workspace git-sync or `make deploy-git`), Snowflake
+authenticates to GitHub via the **Snowflake GitHub App** OAuth2 flow.
+No PAT, no client secret, no rotation — Snowflake manages the tokens.
 
-```bash
-# After scripts/10_setup.sh, create the secret once:
-snow sql -c oregon-sedemo -q "
-  CREATE OR REPLACE SECRET GIT_SIS_INFRA.SECRETS.GITHUB_PAT
-      TYPE = PASSWORD
-      USERNAME = 'waldekkot'
-      PASSWORD = '<your-classic-github-pat>';"
-```
+After running `scripts/10_setup.sh --with-git`:
+
+1. Open **Snowsight → Projects → any Workspace**
+2. In the **Files** tab select **Connect Git Repository**
+3. Complete the GitHub OAuth authorization (one click)
+
+That's it. Subsequent `FETCH` operations (including `make deploy-git`) work
+automatically from both Snowsight and the CLI.
 
 ## Run it
 
@@ -116,8 +114,8 @@ snow sql -c oregon-sedemo -q "
 # 0. Install deps + pre-commit hooks
 uv sync && uv run pre-commit install
 
-# 1. One-time: create infra DB + GIT_SIS schema + tables
-scripts/10_setup.sh -c oregon-sedemo
+# 1. One-time: create GIT_SIS schema + tables
+scripts/10_setup.sh
 
 # 2. Verify locally (uses CLI connection via the session seam)
 scripts/20_run-local.sh -c oregon-sedemo
@@ -255,11 +253,11 @@ make test-watch       # watch mode on unit tests
 make test-full        # unit + integration
 make test-live        # cross-validate units against real Snowflake
 make dev              # start app locally (port 8501)
-make setup            # one-time Snowflake setup (infra DB + GIT_SIS schema)
+make setup            # one-time Snowflake setup (GIT_SIS schema + tables)
 make deploy           # snow streamlit deploy
 make verify           # check app + print URL
 make open             # open app URL in browser
-make clean            # reset demo (keeps PAT secret)
+make clean            # reset demo
 make clean-all        # full teardown
 make lint             # ruff check + format check
 make fmt              # auto-format with ruff
@@ -303,17 +301,20 @@ The deploy job runs `scripts/30_deploy.sh -c ci` which executes
 
 ## Cleanup
 
-| Script | What it removes | PAT secret |
-|--------|----------------|------------|
-| `scripts/90_cleanup.sh` | GIT_SIS schema, API integration, STREAMLIT | **Survives** |
-| `scripts/99_cleanup-infra.sh` | Everything + GIT_SIS_INFRA DB + GITHUB_PAT | **Dropped** |
+| Script | What it removes |
+|--------|------------------|
+| `scripts/90_cleanup.sh` | GIT_SIS schema (CASCADE), STREAMLIT, GIT REPOSITORY, API integration |
+| `scripts/99_cleanup-infra.sh` | Same as above, with a confirmation prompt (nuclear option) |
+
+No separate infra database or PAT secret exists with OAuth2 —
+both scripts drop the same objects.
 
 ```bash
-# Normal reset (keep the PAT — no re-entry needed on rebuild)
-scripts/90_cleanup.sh -c oregon-sedemo
+# Normal reset
+scripts/90_cleanup.sh
 
 # Full decommission (requires confirmation or --yes)
-scripts/99_cleanup-infra.sh -c oregon-sedemo
+scripts/99_cleanup-infra.sh
 ```
 
 ## Target

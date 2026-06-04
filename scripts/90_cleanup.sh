@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# 90_cleanup.sh -- reset the demo (keeps GIT_SIS_INFRA + GitHub PAT secret).
+# 90_cleanup.sh -- reset the demo.
 #
 # Drops: STREAMLIT object, GIT REPOSITORY, GIT_SIS schema (CASCADE), API integration.
-# Keeps: GIT_SIS_INFRA database and SECRETS.GITHUB_PAT (permanent credential store).
+# The API integration is dropped but the Snowflake GitHub App OAuth2 authorization
+# is preserved in Snowflake -- no re-authorization needed when you rebuild.
 #
 # After running, the demo can be rebuilt with:
-#   scripts/10_setup.sh && scripts/30_deploy.sh
-# No need to re-enter the GitHub PAT -- it survived the reset.
+#   scripts/10_setup.sh && scripts/30_deploy.sh        (push-based)
+#   scripts/10_setup.sh --with-git && scripts/30_deploy.sh  (+ git wiring)
 #
-# For FULL teardown (drops GIT_SIS_INFRA too), use:
+# For a full teardown that also revokes the GitHub App OAuth connection, use:
 #   scripts/99_cleanup-infra.sh
 #
 # Usage:
@@ -16,7 +17,7 @@
 #
 # Options:
 #   -c, --connection NAME   Snowflake CLI connection
-#                           (default: $SNOWFLAKE_DEFAULT_CONNECTION_NAME or 'oregon-sedemo')
+#                           (default: $SNOWFLAKE_DEFAULT_CONNECTION_NAME or 'default')
 #   -h, --help              Show this help text
 #       --version           Print version and exit
 
@@ -28,7 +29,8 @@ show_help() {
 git-sis $VERSION -- 90_cleanup
 
 Resets the demo by dropping GIT_SIS schema (+ STREAMLIT, GIT REPOSITORY,
-API integration). The GIT_SIS_INFRA database and GITHUB_PAT secret survive.
+API integration). Authentication is Snowflake GitHub App OAuth2 -- no PAT
+to preserve. Re-running make setup-git restores the API integration.
 
 USAGE
     $(basename "$0") [OPTIONS]
@@ -42,13 +44,10 @@ WHAT IS DROPPED
     SNOWFLAKE_LEARNING_DB.GIT_SIS.*  (schema CASCADE: tables, STREAMLIT, GIT REPOSITORY)
     git_api_waldekkot                (API integration, ACCOUNTADMIN required)
 
-WHAT SURVIVES
-    GIT_SIS_INFRA.SECRETS.GITHUB_PAT   (permanent -- no re-entry needed on rebuild)
-
 REBUILD
     scripts/10_setup.sh && scripts/30_deploy.sh
 
-FULL TEARDOWN (also drops infra DB + secret)
+FULL TEARDOWN (revokes GitHub App OAuth connection too)
     scripts/99_cleanup-infra.sh
 EOF
 }
@@ -62,9 +61,8 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
 info "Resetting demo state (connection: $CONN) ..."
 warn "This drops SNOWFLAKE_LEARNING_DB.GIT_SIS and the API integration."
-warn "GIT_SIS_INFRA.SECRETS.GITHUB_PAT will be preserved."
 
 snow sql -c "$CONN" -f "$ROOT_DIR/deploy/99_cleanup.sql"
 
-success "Demo reset complete. GIT_SIS_INFRA.SECRETS.GITHUB_PAT is intact."
+success "Demo reset complete."
 info "Rebuild anytime: scripts/10_setup.sh && scripts/30_deploy.sh"

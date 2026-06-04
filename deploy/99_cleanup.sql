@@ -1,15 +1,16 @@
 -- =====================================================================
--- 99_cleanup.sql  -- reset the demo (keeps the GitHub PAT secret)
+-- 99_cleanup.sql  -- full demo teardown
 -- =====================================================================
 -- Drops everything in dependency order (children first, then parents).
 -- Idempotent: IF EXISTS on every statement -- safe to re-run.
 --
--- Cleanup levels:
---   99_cleanup.sql (this)  -- resets demo state; PAT secret survives
---   98_cleanup_infra.sql   -- FULL teardown including GIT_SIS_INFRA DB
+-- Authentication: uses Snowflake GitHub App OAuth2 -- no PAT to manage.
+-- Dropping the API integration revokes the GitHub OAuth connection;
+-- run make setup-git again (+ re-authorize in Snowsight) to rebuild.
 --
 -- Run:
---   snow sql -c oregon-sedemo -f deploy/99_cleanup.sql
+--   snow sql -c <conn> -f deploy/99_cleanup.sql
+--   make clean    (runs 99_cleanup.sql)
 --
 -- WARNING: This is destructive and irreversible for GIT_SIS data.
 -- =====================================================================
@@ -25,9 +26,8 @@ DROP STREAMLIT IF EXISTS SNOWFLAKE_LEARNING_DB.GIT_SIS.INGEST_CONSOLE;
 -- Git repository clone (also releases the external git connection)
 DROP GIT REPOSITORY IF EXISTS SNOWFLAKE_LEARNING_DB.GIT_SIS.APP_REPO;
 
--- NOTE: GITHUB_PAT is NOT dropped here -- it lives in a separate database
--- (GIT_SIS_INFRA.SECRETS.GITHUB_PAT) so it survives demo resets.
--- To also drop the credential, run: deploy/98_cleanup_infra.sql
+-- NOTE: No credential secrets to clean up -- authentication uses the
+-- Snowflake GitHub App OAuth2 flow (no stored PAT).
 
 -- Tables + the schema itself (CASCADE drops ORDERS, INGEST_LOG, and anything else)
 DROP SCHEMA IF EXISTS SNOWFLAKE_LEARNING_DB.GIT_SIS CASCADE;

@@ -1,45 +1,40 @@
 -- =====================================================================
 -- 10_git_and_streamlit.sql  -- git-connected SiS deploy (container runtime)
 -- =====================================================================
--- Wires Snowflake to the private GitHub repo and creates the Streamlit object
--- directly FROM the git repository clone, on the container runtime.
+-- Wires Snowflake to the GitHub repo via OAuth2 (Snowflake GitHub App)
+-- and creates the Streamlit object directly FROM the git repository clone,
+-- on the container runtime.
+--
+-- Authentication: Snowflake GitHub App OAuth2
+--   No secrets, no PATs, no rotation.  Each developer authorizes once in
+--   Snowsight; Snowflake manages the OAuth tokens automatically.
 --
 -- Run order matters. Sections 1-2 are a ONE-TIME bootstrap (idempotent).
 -- Section 3 is the (re)deploy loop -- safe to re-run after every git push.
---
--- IMPORTANT: The GitHub PAT lives in GIT_SIS_INFRA.SECRETS.GITHUB_PAT --
--- a separate database that survives 99_cleanup.sql resets.
--- Run deploy/01_setup_infra.sql once to create the DB+schema, then create
--- the secret out-of-band (value never stored in git -- see section 1 below).
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
--- 1. Secret with the GitHub PAT -- lives in GIT_SIS_INFRA.SECRETS so it
---    survives 99_cleanup.sql.  Create it out-of-band (see IMPORTANT note above
---    or run deploy/01_setup_infra.sql first, then create the secret).
--- ---------------------------------------------------------------------
--- PREREQUISITE: run 01_setup_infra.sql first, then create the secret:
---   snow sql -c oregon-sedemo -q "
---     CREATE OR REPLACE SECRET GIT_SIS_INFRA.SECRETS.GITHUB_PAT
---         TYPE = PASSWORD
---         USERNAME = 'waldekkot'
---         PASSWORD = '<your-classic-github-pat>';"
---
--- The secret is NOT recreated here -- it lives permanently in GIT_SIS_INFRA.
-
--- ---------------------------------------------------------------------
--- 2. API integration for github.com/waldekkot (needs ACCOUNTADMIN).
---    If your role lacks CREATE INTEGRATION, hand this block to an admin.
+-- 1. API integration (needs ACCOUNTADMIN).
+--    Uses the Snowflake GitHub App -- no client-id, secret, or redirect
+--    URI registration required.  The App is pre-configured by Snowflake.
 -- ---------------------------------------------------------------------
 USE ROLE ACCOUNTADMIN;
 
 CREATE API INTEGRATION IF NOT EXISTS git_api_waldekkot
     API_PROVIDER = git_https_api
     API_ALLOWED_PREFIXES = ('https://github.com/waldekkot')
-    ALLOWED_AUTHENTICATION_SECRETS = (GIT_SIS_INFRA.SECRETS.GITHUB_PAT)
+    API_USER_AUTHENTICATION = (TYPE = SNOWFLAKE_GITHUB_APP)
     ENABLED = TRUE;
 
 GRANT USAGE ON INTEGRATION git_api_waldekkot TO ROLE SYSADMIN;
+
+-- ---------------------------------------------------------------------
+-- 2. OAuth authorization (one-time, per user).
+--    Before the first FETCH each user must authorize the Snowflake GitHub
+--    App.  Open Snowsight → Projects → any Workspace → Files tab →
+--    "Connect Git Repository" and complete the GitHub OAuth flow.
+--    After that one authorization, FETCH works from Snowsight AND the CLI.
+-- ---------------------------------------------------------------------
 
 -- ---------------------------------------------------------------------
 -- 3. (Re)deploy loop -- SYSADMIN. Safe to re-run after every git push.
@@ -47,22 +42,20 @@ GRANT USAGE ON INTEGRATION git_api_waldekkot TO ROLE SYSADMIN;
 USE ROLE SYSADMIN;
 USE SCHEMA SNOWFLAKE_LEARNING_DB.GIT_SIS;
 
+-- No GIT_CREDENTIALS parameter: authentication is handled by the
+-- Snowflake GitHub App OAuth2 integration above.
 CREATE GIT REPOSITORY IF NOT EXISTS SNOWFLAKE_LEARNING_DB.GIT_SIS.APP_REPO
     API_INTEGRATION = git_api_waldekkot
-    GIT_CREDENTIALS = GIT_SIS_INFRA.SECRETS.GITHUB_PAT
     ORIGIN = 'https://github.com/waldekkot/git-sis';
 
--- Pull the latest commit(s) into the clone (FROM snapshots at CREATE time).
+-- Pull the latest commit(s) into the clone.
+-- Requires OAuth authorization (Section 2 above) to be completed first.
 ALTER GIT REPOSITORY SNOWFLAKE_LEARNING_DB.GIT_SIS.APP_REPO FETCH;
 
--- Create the app FROM the git clone, container runtime. ROOT_LOCATION is NOT
--- valid for container runtime -- FROM is required (and supports git integration).
--- NOTE: the container runtime REQUIRES a dependency file (app/pyproject.toml) in
--- the app source dir, and EXTERNAL_ACCESS_INTEGRATIONS with a PyPI EAI to resolve
--- it. Without app/pyproject.toml the app fails to load:
---   "Installing dependencies failed because the pyproject.toml file does not exist."
--- Grant the PyPI EAI to SYSADMIN first (as ACCOUNTADMIN):
---   GRANT USAGE ON INTEGRATION PYPI_ACCESS_INTEGRATION TO ROLE SYSADMIN;
+-- Create the app FROM the git clone, container runtime.
+-- NOTE: container runtime requires app/pyproject.toml + PYPI_ACCESS_INTEGRATION.
+--   Grant first (as ACCOUNTADMIN):
+--     GRANT USAGE ON INTEGRATION PYPI_ACCESS_INTEGRATION TO ROLE SYSADMIN;
 CREATE OR REPLACE STREAMLIT SNOWFLAKE_LEARNING_DB.GIT_SIS.INGEST_CONSOLE
     FROM '@SNOWFLAKE_LEARNING_DB.GIT_SIS.APP_REPO/branches/main/app/'
     MAIN_FILE = 'streamlit_app.py'

@@ -33,30 +33,11 @@ concurrency:
 
 jobs:
   unit-tests:
-    name: Unit tests + lint + arch (no Snowflake)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
-
-      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a  # v4.2.0
-        with:
-          version: "latest"
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
-
-      - name: Install dependencies
-        run: uv sync
-
-      - name: Run unit tests
-        run: uv run pytest tests/unit/ -v --tb=short
-
-      - name: Run ruff lint
-        run: uv run ruff check app/
-
-      - name: Enforce architecture (lib must not import streamlit)
-        # import-linter contract in app/.importlinter; run from app/ so `lib`
-        # resolves to app/lib, --project .. uses the root dev venv.
-        run: cd app && uv run --project .. lint-imports
+    # Delegates to reusable workflow — single source of truth for unit test steps.
+    # Also runs on pull_request (no Snowflake credentials required).
+    uses: ./.github/workflows/reusable-unit-tests.yml
+    with:
+      python-version: "3.11"
 
   integration-tests:
     name: Integration tests (real Snowflake, OIDC)

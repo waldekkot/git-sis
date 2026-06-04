@@ -28,19 +28,10 @@ concurrency:
 
 jobs:
   unit-tests:
-    name: Unit tests (no Snowflake)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
-      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a  # v4.2.0
-        with:
-          version: "latest"
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
-      - name: Install dependencies
-        run: uv sync
-      - name: Run unit tests
-        run: uv run pytest tests/unit/ -v --tb=short
+    # Delegates to reusable workflow — single source of truth for unit test steps.
+    uses: ./.github/workflows/reusable-unit-tests.yml
+    with:
+      python-version: "3.11"
 
   preview-deploy:
     name: Deploy PR preview

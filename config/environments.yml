@@ -1,0 +1,84 @@
+# config/environments.yml — single authoritative reference for environment identifiers
+#
+# Purpose
+# -------
+# Environment identifiers (database, schema, app name, warehouse, service users)
+# are currently spread across: Makefile defaults, app/snowflake.yml env-var expressions,
+# .github/workflows/*.yml env: blocks, and docs/oidc-setup.md SUBJECT values.
+#
+# This file is the SINGLE SOURCE OF TRUTH. When you need to change any identifier,
+# update it here first and grep for other occurrences:
+#
+#   grep -r "GIT_SIS\|CI_SVC\|sfseeurope-wkot_demo1" . --include="*.yml" --include="*.sh" --include="*.sql" --include="*.toml" --include="*.md"
+#
+# Usage
+# -----
+# This file is NOT parsed by CI or Makefile at runtime — it is a human reference
+# and a changelog anchor (git blame shows when identifiers changed).
+# To add runtime env-var templating, consider yq or envsubst in your scripts.
+#
+# OIDC subject format: repo:<owner>/<repo>:environment:<env>
+# GitHub Environments: https://github.com/waldekkot/git-sis/settings/environments
+# OIDC setup: docs/oidc-setup.md
+
+environments:
+
+  # ── Local development ────────────────────────────────────────────────────────
+  local:
+    # Override via .envrc (see .envrc.example) for personal sandbox isolation.
+    account: sfseeurope-wkot_demo1          # override: GIT_SIS_SF_ACCOUNT repo var
+    database: SNOWFLAKE_LEARNING_DB          # override: GIT_SIS_DATABASE env var
+    schema: GIT_SIS                          # override: GIT_SIS_SCHEMA env var
+    app_name: INGEST_CONSOLE                 # override: GIT_SIS_APP_NAME env var
+    warehouse: COMPUTE_WH                    # override: GIT_SIS_WAREHOUSE env var
+    oidc_subject: null                       # no OIDC for local dev (uses CLI connection)
+    service_user: null
+
+  # ── CI — integration tests ────────────────────────────────────────────────────
+  ci:
+    # GitHub Actions environment: ci (no required reviewers)
+    # OIDC subject resolved automatically by GitHub for jobs with environment: ci
+    account: sfseeurope-wkot_demo1           # override: GIT_SIS_SF_ACCOUNT repo var
+    database: SNOWFLAKE_LEARNING_DB
+    schema: GIT_SIS
+    app_name: INGEST_CONSOLE
+    warehouse: COMPUTE_WH
+    oidc_subject: repo:waldekkot/git-sis:environment:ci
+    service_user: CI_SVC_CI                  # override: GIT_SIS_SF_USER_CI repo var
+    github_environment: ci
+
+  # ── Preview — per-PR ephemeral apps ──────────────────────────────────────────
+  preview:
+    # GitHub Actions environment: preview (no required reviewers)
+    # Schema and app_name are dynamic: GIT_SIS_PR_<pr_number>, INGEST_CONSOLE_PR_<pr_number>
+    account: sfseeurope-wkot_demo1           # override: GIT_SIS_SF_ACCOUNT repo var
+    database: SNOWFLAKE_LEARNING_DB
+    schema: GIT_SIS_PR_<pr_number>           # placeholder: substituted in preview.yml
+    app_name: INGEST_CONSOLE_PR_<pr_number>  # placeholder: substituted in preview.yml
+    warehouse: COMPUTE_WH
+    oidc_subject: repo:waldekkot/git-sis:environment:preview
+    service_user: CI_SVC_PREVIEW             # override: GIT_SIS_SF_USER_PREVIEW repo var
+    github_environment: preview
+
+  # ── Prod — live deployed app ──────────────────────────────────────────────────
+  prod:
+    # GitHub Actions environment: prod (REQUIRED REVIEWERS — see repo Settings)
+    account: sfseeurope-wkot_demo1           # override: GIT_SIS_SF_ACCOUNT repo var
+    database: SNOWFLAKE_LEARNING_DB
+    schema: GIT_SIS
+    app_name: INGEST_CONSOLE
+    warehouse: COMPUTE_WH
+    oidc_subject: repo:waldekkot/git-sis:environment:prod
+    service_user: CI_SVC_PROD                # override: GIT_SIS_SF_USER_PROD repo var
+    github_environment: prod
+
+# ── Repository variables (set in GitHub Settings → Variables) ─────────────────
+# These override the defaults above for all environments simultaneously:
+#
+#   GIT_SIS_SF_ACCOUNT        Snowflake account identifier (no .snowflakecomputing.com)
+#   GIT_SIS_DATABASE          Target database
+#   GIT_SIS_SCHEMA            Target schema (used in prod/ci; preview overrides per-PR)
+#   GIT_SIS_APP_NAME          Streamlit object name
+#   GIT_SIS_SF_USER_CI        SERVICE user for ci environment
+#   GIT_SIS_SF_USER_PREVIEW   SERVICE user for preview environment
+#   GIT_SIS_SF_USER_PROD      SERVICE user for prod environment

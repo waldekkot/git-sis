@@ -59,7 +59,35 @@ CREATE OR REPLACE USER CI_SVC_PROD
 GRANT ROLE SYSADMIN TO USER CI_SVC_CI;
 GRANT ROLE SYSADMIN TO USER CI_SVC_PREVIEW;
 GRANT ROLE SYSADMIN TO USER CI_SVC_PROD;
+
+-- Default warehouse (avoids "No active warehouse selected" errors)
+ALTER USER CI_SVC_CI      SET DEFAULT_WAREHOUSE = COMPUTE_WH;
+ALTER USER CI_SVC_PREVIEW SET DEFAULT_WAREHOUSE = COMPUTE_WH;
+ALTER USER CI_SVC_PROD    SET DEFAULT_WAREHOUSE = COMPUTE_WH;
 ```
+
+### Network policy for CI runners
+
+If your account has a VPN-restricted network policy (common in SE/field accounts), GitHub
+Actions runners will be blocked with `250001: IP not allowed to access Snowflake`. Fix this
+with a **per-user** network policy that doesn't weaken the account-level policy:
+
+```sql
+-- Allow all IPs (GitHub Actions uses dynamic runner IPs)
+CREATE OR REPLACE NETWORK POLICY CI_GITHUB_ACTIONS_POLICY
+  ALLOWED_IP_LIST = ('0.0.0.0/0')
+  COMMENT = 'Allows GitHub Actions runners (SERVICE users only)';
+
+-- Assign ONLY to CI SERVICE users (not to interactive users)
+ALTER USER CI_SVC_CI      SET NETWORK_POLICY = CI_GITHUB_ACTIONS_POLICY;
+ALTER USER CI_SVC_PREVIEW SET NETWORK_POLICY = CI_GITHUB_ACTIONS_POLICY;
+ALTER USER CI_SVC_PROD    SET NETWORK_POLICY = CI_GITHUB_ACTIONS_POLICY;
+```
+
+> **Security note:** The permissive IP range is acceptable here because:
+> 1. SERVICE users authenticate exclusively via OIDC — no password/key to brute-force.
+> 2. OIDC tokens are short-lived (~5 min) and scoped to a specific repo + environment.
+> 3. The account-level VPN policy still protects all interactive (human) users.
 
 ## 2. GitHub side (repo Settings)
 
@@ -79,15 +107,20 @@ Each Snowflake-touching job:
 - declares `permissions: { id-token: write, contents: read }`,
 - sets `environment:` to drive the subject and (for prod) the approval gate,
 - runs `snowflakedb/snowflake-cli-action@v2` with `use-oidc: true` and
-  `oidc-token-name: SNOWFLAKE_CONNECTIONS_CI_TOKEN`,
-- then the composite action `.github/actions/setup-snowflake` writes a token-free
-  `config.toml` `[connections.ci]` block (account + service user +
-  `authenticator = WORKLOAD_IDENTITY`).
+  `oidc-token-name: SNOWFLAKE_CONNECTIONS_<ENV>_TOKEN`,
+- then the composite action `.github/actions/setup-snowflake` writes the OIDC token
+  **inline** into `~/.snowflake/config.toml` (`token = "..."`) with `::add-mask::`.
 
-The action exports `SNOWFLAKE_CONNECTIONS_CI_TOKEN` (the short-lived token) plus the
-global `SNOWFLAKE_AUTHENTICATOR` / `SNOWFLAKE_WORKLOAD_IDENTITY_PROVIDER` /
-`SNOWFLAKE_AUDIENCE` variables, so `snow ... -c ci` and the Snowpark integration tests
-(`SNOWFLAKE_DEFAULT_CONNECTION_NAME=ci`) both authenticate without a stored secret.
+### Why inline token (not env-var or token_file_path)?
+
+| Approach | Works? | Notes |
+|---|---|---|
+| `SNOWFLAKE_CONNECTIONS_CI_TOKEN` env var | ❌ for Snowpark | `Session.builder.config("connection_name", ...)` doesn't read env-var overrides for `token`. |
+| `token_file_path = "/tmp/..."` | ❌ | Wraps content in a PAT attestation envelope — wrong format for raw OIDC JWT. |
+| `token = "<jwt>"` in config.toml | ✅ | Read directly by both `snow` CLI and Snowpark connector. |
+
+The `::add-mask::` GitHub Actions command ensures the token value never appears in logs,
+even in a public repo.
 
 ## Verifying
 

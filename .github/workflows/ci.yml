@@ -24,6 +24,13 @@ on:
     branches: [main]
   pull_request:
 
+# Prevent parallel deploys to the same target. Two pushes to main queue
+# (cancel-in-progress: false) so every commit ships in order. PR unit tests
+# cancel stale runs (cancel-in-progress: true) — only the latest commit matters.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   unit-tests:
     name: Unit tests + lint + arch (no Snowflake)

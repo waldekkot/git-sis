@@ -18,6 +18,11 @@ on:
     tags:
       - "v*.*.*"
 
+# Tags are unique, but guard against a race if two tags are pushed simultaneously.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
     name: Deploy + commit version ${{ github.ref_name }}

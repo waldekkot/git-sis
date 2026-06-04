@@ -20,6 +20,12 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+# Only the latest commit on a feature branch needs a preview deploy.
+# Cancel any in-progress run for the same PR when a new commit arrives.
+concurrency:
+  group: preview-pr-${{ github.event.number }}
+  cancel-in-progress: true
+
 jobs:
   unit-tests:
     name: Unit tests (no Snowflake)

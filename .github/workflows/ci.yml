@@ -120,6 +120,24 @@ jobs:
         # Stable, rollback-able versions are committed on vX.Y.Z tags by release.yml.
         run: scripts/30_deploy.sh -c ci
 
-      - name: Post-deploy smoke check
+      - name: Capture deployed app URL
+        id: app-url
+        run: |
+          APP_FQN="${GIT_SIS_DATABASE}.${GIT_SIS_SCHEMA}.${GIT_SIS_APP_NAME}"
+          URL=$(snow streamlit get-url -c ci "$APP_FQN" 2>&1) || URL=""
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+        env:
+          GIT_SIS_DATABASE: ${{ vars.GIT_SIS_DATABASE || 'SNOWFLAKE_LEARNING_DB' }}
+          GIT_SIS_SCHEMA: ${{ vars.GIT_SIS_SCHEMA || 'GIT_SIS' }}
+          GIT_SIS_APP_NAME: ${{ vars.GIT_SIS_APP_NAME || 'INGEST_CONSOLE' }}
+
+      - name: Post-deploy smoke check (shell)
         # Fail the pipeline if the deployed object is missing / unhealthy.
         run: scripts/40_verify.sh -c ci
+
+      - name: Post-deploy smoke tests (pytest)
+        # Run pytest smoke tier if we captured a URL. Skips gracefully if not.
+        if: steps.app-url.outputs.url != ''
+        run: uv run pytest tests/smoke/ -v --tb=short --no-cov
+        env:
+          GIT_SIS_APP_URL: ${{ steps.app-url.outputs.url }}

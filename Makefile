@@ -78,6 +78,14 @@ test-integration:  ## Integration tests — parallel via xdist, ~12s (was ~60s s
 test-live:  ## Cross-validate unit tests against real Snowflake — parallel, ~80s
 	uv run pytest tests/unit/ -v --tb=short --no-cov --snowflake-session=live -n auto --dist=loadfile
 
+test-smoke:  ## Post-deploy smoke tests — requires GIT_SIS_APP_URL env var
+	@# Usage: make test-smoke   (GIT_SIS_APP_URL must be set in env or .envrc)
+	@# In CI the URL is captured from snow streamlit get-url and exported automatically.
+	@test -n "$(GIT_SIS_APP_URL)" || (echo "  [error] GIT_SIS_APP_URL is not set." && \
+	    echo "         Export it: export GIT_SIS_APP_URL=\$$(snow streamlit get-url -c \$$(CONN) \$$(GIT_SIS_DATABASE).\$$(GIT_SIS_SCHEMA).\$$(GIT_SIS_APP_NAME))" && \
+	    exit 1)
+	GIT_SIS_APP_URL=$(GIT_SIS_APP_URL) uv run pytest tests/smoke/ -v --tb=short --no-cov
+
 # -- Local development ---------------------------------------------------------
 
 dev:  ## Start the app locally against real Snowflake (port 8501)

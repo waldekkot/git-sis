@@ -1,0 +1,17 @@
+name: git-sis
+description: >
+  DCM project for the git-sis Ingestion Ops Console schema objects.
+  Manages ORDERS and INGEST_LOG tables declaratively — define desired state
+  in dcm/definitions/, then PLAN (preview changes) and DEPLOY (apply changes).
+
+version: "1"
+
+# DCM documentation:
+#   https://docs.snowflake.com/en/developer-guide/dcm-projects
+#
+# One-time setup (run as ACCOUNTADMIN / SYSADMIN):
+#   See docs/dcm-setup.md
+#
+# Typical workflow:
+#   make dcm-plan    → preview what would change (fails on destructive changes)
+#   make dcm-deploy  → apply changes to target schema

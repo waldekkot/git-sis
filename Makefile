@@ -139,6 +139,26 @@ deploy-sql:  ## Apply SQL infra scripts via snow git execute (pull-based DDL, re
 	snow git execute -c $(CONN) \
 	    "@$(GIT_SIS_DATABASE).$(GIT_SIS_SCHEMA).APP_REPO/branches/main/deploy/00_setup_env.sql"
 
+# DCM (Database Change Management) targets
+# Prerequisite: make dcm-plan / dcm-deploy require a DCM project object in Snowflake.
+# One-time setup: see docs/dcm-setup.md
+DCM_PROJECT ?= $(GIT_SIS_DATABASE).$(GIT_SIS_SCHEMA).GIT_SIS_DCM
+
+dcm-plan:  ## Preview DCM schema changes (read-only, safe to run anytime)
+	@# Shows what ALTER TABLE / CREATE TABLE / DROP TABLE operations DCM would apply.
+	@# Fails if destructive changes are detected — review before deploying.
+	snow dcm plan \
+	    --project-name $(DCM_PROJECT) \
+	    --source dcm/ \
+	    -c $(CONN)
+
+dcm-deploy:  ## Apply DCM schema changes to target schema (after reviewing plan)
+	@# Always run make dcm-plan first to review the diff.
+	snow dcm deploy \
+	    --project-name $(DCM_PROJECT) \
+	    --source dcm/ \
+	    -c $(CONN)
+
 verify:  ## Check deployed app status + print URL
 	scripts/40_verify.sh -c $(CONN)
 

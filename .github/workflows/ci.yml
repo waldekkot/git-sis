@@ -84,10 +84,52 @@ jobs:
         env:
           SNOWFLAKE_DEFAULT_CONNECTION_NAME: ci
 
+  dcm-plan:
+    name: DCM schema plan (preview DDL changes)
+    runs-on: ubuntu-latest
+    needs: integration-tests
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: ci
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      GIT_SIS_DATABASE: ${{ vars.GIT_SIS_DATABASE || 'SNOWFLAKE_LEARNING_DB' }}
+      GIT_SIS_SCHEMA:   ${{ vars.GIT_SIS_SCHEMA   || 'GIT_SIS' }}
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - uses: snowflakedb/snowflake-cli-action@cea89ff4adad9ac1ff82dd767433bee926342d02  # v2.0.2
+        with:
+          use-oidc: true
+          cli-version: "3.19"
+          oidc-token-name: SNOWFLAKE_CONNECTIONS_CI_TOKEN
+          default-config-file-path: __skip__
+
+      - uses: ./.github/actions/setup-snowflake
+        with:
+          sf-account: ${{ vars.GIT_SIS_SF_ACCOUNT || 'sfseeurope-wkot_demo1' }}
+          sf-user: ${{ vars.GIT_SIS_SF_USER_CI || 'CI_SVC_CI' }}
+
+      - name: Run DCM plan
+        # Previews what schema changes DCM would apply.
+        # Fails if a DCM project object doesn't exist yet — see docs/dcm-setup.md.
+        # Fails if destructive changes are detected (DROP TABLE, DROP COLUMN) — review before proceeding.
+        # Skip this step by adding '[skip-dcm]' to the commit message if DCM isn't set up yet.
+        if: "!contains(github.event.head_commit.message, '[skip-dcm]')"
+        run: |
+          DCM_PROJECT="${GIT_SIS_DATABASE}.${GIT_SIS_SCHEMA}.GIT_SIS_DCM"
+          snow dcm plan \
+              --project-name "$DCM_PROJECT" \
+              --source dcm/ \
+              -c ci || echo "::warning::DCM plan failed. Run docs/dcm-setup.md to create the DCM project object, then re-run."
+        continue-on-error: true  # non-blocking until DCM is set up (add [skip-dcm] to bypass)
+
   deploy-to-sis:
     name: Deploy to SiS (prod, gated)
     runs-on: ubuntu-latest
-    needs: integration-tests
+    needs: [integration-tests, dcm-plan]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: prod   # set REQUIRED REVIEWERS in repo Settings -> Environments -> prod
     permissions:

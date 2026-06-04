@@ -99,7 +99,16 @@ APP_DIR="$ROOT_DIR/app"
 DB="${GIT_SIS_DATABASE:-SNOWFLAKE_LEARNING_DB}"
 SCHEMA="${GIT_SIS_SCHEMA:-GIT_SIS}"
 APP_NAME="${GIT_SIS_APP_NAME:-INGEST_CONSOLE}"
+WAREHOUSE="${GIT_SIS_WAREHOUSE:-COMPUTE_WH}"
 APP_FQN="$DB.$SCHEMA.$APP_NAME"
+
+# Export so snow streamlit deploy's ctx.env template resolution sees them.
+# (The Makefile exports these already; this ensures standalone script invocation
+# — including from CI — also works without the Makefile wrapper.)
+export GIT_SIS_DATABASE="$DB"
+export GIT_SIS_SCHEMA="$SCHEMA"
+export GIT_SIS_APP_NAME="$APP_NAME"
+export GIT_SIS_WAREHOUSE="$WAREHOUSE"
 
 info "Deploying via snow streamlit deploy (connection: $CONN) ..."
 info "Target: $APP_FQN"

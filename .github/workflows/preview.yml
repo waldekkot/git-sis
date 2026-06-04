@@ -68,7 +68,7 @@ jobs:
           use-oidc: true
           cli-version: "3.19"
           oidc-token-name: SNOWFLAKE_CONNECTIONS_CI_TOKEN
-          default-config-file-path: ""   # config written by setup-snowflake below
+          default-config-file-path: __skip__
 
       - uses: ./.github/actions/setup-snowflake
         with:

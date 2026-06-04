@@ -46,14 +46,20 @@ runs:
         # The snowflake-cli-action exports the OIDC token as an env var named
         # SNOWFLAKE_CONNECTIONS_<UPPER_NAME>_TOKEN (e.g. SNOWFLAKE_CONNECTIONS_CI_TOKEN).
         # snow CLI reads env-var overrides natively, but Snowpark's Session.builder
-        # with connection_name does NOT — it reads only config.toml. So we persist
-        # the token to a file and reference it via token_file_path.
+        # with connection_name reads only config.toml. We write the token directly
+        # into the config so both snow CLI and Snowpark authenticate correctly.
         TOKEN_VAR="SNOWFLAKE_CONNECTIONS_$(echo "$CONN_NAME" | tr '[:lower:]' '[:upper:]')_TOKEN"
-        echo "${!TOKEN_VAR}" > /tmp/sf_oidc_token.txt
-        chmod 0600 /tmp/sf_oidc_token.txt
+        TOKEN_VALUE="${!TOKEN_VAR}"
 
         mkdir -p ~/.snowflake
-        printf '[connections.%s]\naccount = "%s"\nuser = "%s"\nauthenticator = "WORKLOAD_IDENTITY"\nworkload_identity_provider = "OIDC"\ntoken_file_path = "/tmp/sf_oidc_token.txt"\n' \
-          "$CONN_NAME" "$SF_ACCOUNT" "$SF_USER" \
-          > ~/.snowflake/config.toml
+        cat > ~/.snowflake/config.toml <<TOML
+        [connections.${CONN_NAME}]
+        account = "${SF_ACCOUNT}"
+        user = "${SF_USER}"
+        authenticator = "WORKLOAD_IDENTITY"
+        workload_identity_provider = "OIDC"
+        token = "${TOKEN_VALUE}"
+        TOML
+        # Remove leading whitespace from heredoc indentation
+        sed -i 's/^        //' ~/.snowflake/config.toml
         chmod 0600 ~/.snowflake/config.toml

@@ -10,11 +10,14 @@ See `docs/WAYS-OF-WORKING.md` §5.1 for the rationale.
 | Channel | What it is | How it updates |
 |---|---|---|
 | **LIVE** | The mutable version every viewer sees | Each merge to `main` redeploys it (ci.yml `deploy-to-sis`, gated by `prod`) |
-| **Committed versions** | Immutable, named snapshots (`V1_2_3`, ...) | Created only by pushing a `vX.Y.Z` git tag (release.yml) |
+| **MAIN_\<sha\>** aliases | Every CI main-branch deploy commits a named snapshot | Created automatically by `deploy-to-sis` job after each push to `main` |
+| **V1_2_3** aliases | Semver release snapshots | Created by pushing a `vX.Y.Z` git tag (release.yml) |
 | **DEFAULT_VERSION** | The version pinned for viewers, if set | Set/reset manually for rollback |
 
 `vX.Y.Z` tags are sanitized to valid Snowflake identifiers: `v1.2.3` → `V1_2_3`
 (dots/dashes → `_`, uppercased) in `scripts/30_deploy.sh`.
+
+`MAIN_<sha>` aliases use the first 7 characters of the commit SHA, uppercased.
 
 ## Cut a release
 
@@ -33,13 +36,25 @@ Confirm:
 SHOW VERSIONS IN STREAMLIT SNOWFLAKE_LEARNING_DB.GIT_SIS.INGEST_CONSOLE;
 ```
 
-## Roll back (seconds, no redeploy)
+## Roll back to any main-branch deploy (seconds, no redeploy)
 
-Pin viewers to the last known-good committed version:
+Every push to `main` that CI deploys creates a `MAIN_<sha>` version alias.
+Pin viewers to any prior deploy by SHA:
+
+```sql
+-- 1. Find available versions:
+SHOW VERSIONS IN STREAMLIT SNOWFLAKE_LEARNING_DB.GIT_SIS.INGEST_CONSOLE;
+
+-- 2. Pin to a specific main-branch deploy:
+ALTER STREAMLIT SNOWFLAKE_LEARNING_DB.GIT_SIS.INGEST_CONSOLE
+  SET DEFAULT_VERSION = MAIN_A1B2C3D;   -- first 7 chars of the target commit SHA
+```
+
+Or roll back to a semver release:
 
 ```sql
 ALTER STREAMLIT SNOWFLAKE_LEARNING_DB.GIT_SIS.INGEST_CONSOLE
-  SET DEFAULT_VERSION = V1_2_2;   -- prior good alias from SHOW VERSIONS
+  SET DEFAULT_VERSION = V1_2_2;   -- prior good semver alias from SHOW VERSIONS
 ```
 
 To return to tracking LIVE after a fix ships:

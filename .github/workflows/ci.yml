@@ -116,9 +116,34 @@ jobs:
           sf-user: ${{ vars.GIT_SIS_SF_USER_PROD || 'CI_SVC_PROD' }}
 
       - name: Deploy to Snowflake SiS
-        # main deploys stay on the mutable LIVE version (no committed alias).
-        # Stable, rollback-able versions are committed on vX.Y.Z tags by release.yml.
+        # Push-based deploy: uploads app/ files to Snowflake stage and creates/replaces
+        # the Streamlit object. This is the primary CI deploy mechanism.
         run: scripts/30_deploy.sh -c ci
+
+      - name: Commit version alias for this main-branch deploy
+        # Every main-branch deploy gets a stable, rollback-able version alias.
+        # This means ANY prior deploy on main can be restored in seconds:
+        #   ALTER STREAMLIT ... SET DEFAULT_VERSION = MAIN_<sha>;
+        # See docs/runbook.md for the full rollback procedure.
+        #
+        # Alias format: MAIN_<7-char-sha>  (e.g. MAIN_A1B2C3D)
+        # Note: vX.Y.Z tags use a separate alias pattern via release.yml.
+        run: |
+          SHORT_SHA="${{ github.sha }}"
+          SHORT_SHA="${SHORT_SHA:0:7}"
+          ALIAS="MAIN_$(echo "${SHORT_SHA}" | tr '[:lower:]' '[:upper:]')"
+          APP_FQN="${GIT_SIS_DATABASE}.${GIT_SIS_SCHEMA}.${GIT_SIS_APP_NAME}"
+          snow sql -c ci -q "
+            ALTER STREAMLIT ${APP_FQN}
+              ADD VERSION IF NOT EXISTS ${ALIAS}
+              FROM LAST
+              COMMENT = 'CI main-branch deploy: sha=${{ github.sha }} run=${{ github.run_id }}';"
+          echo "Committed version alias: ${ALIAS}"
+          echo "VERSION_ALIAS=${ALIAS}" >> "$GITHUB_ENV"
+        env:
+          GIT_SIS_DATABASE: ${{ vars.GIT_SIS_DATABASE || 'SNOWFLAKE_LEARNING_DB' }}
+          GIT_SIS_SCHEMA:   ${{ vars.GIT_SIS_SCHEMA   || 'GIT_SIS' }}
+          GIT_SIS_APP_NAME: ${{ vars.GIT_SIS_APP_NAME  || 'INGEST_CONSOLE' }}
 
       - name: Capture deployed app URL
         id: app-url
@@ -128,8 +153,8 @@ jobs:
           echo "url=$URL" >> "$GITHUB_OUTPUT"
         env:
           GIT_SIS_DATABASE: ${{ vars.GIT_SIS_DATABASE || 'SNOWFLAKE_LEARNING_DB' }}
-          GIT_SIS_SCHEMA: ${{ vars.GIT_SIS_SCHEMA || 'GIT_SIS' }}
-          GIT_SIS_APP_NAME: ${{ vars.GIT_SIS_APP_NAME || 'INGEST_CONSOLE' }}
+          GIT_SIS_SCHEMA:   ${{ vars.GIT_SIS_SCHEMA   || 'GIT_SIS' }}
+          GIT_SIS_APP_NAME: ${{ vars.GIT_SIS_APP_NAME  || 'INGEST_CONSOLE' }}
 
       - name: Post-deploy smoke check (shell)
         # Fail the pipeline if the deployed object is missing / unhealthy.

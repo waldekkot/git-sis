@@ -163,25 +163,32 @@ SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo \
     <svg class="svg-anim" viewBox="0 0 500 220" fill="none" xmlns="http://www.w3.org/2000/svg"
          style="width:100%;max-width:500px" role="img" aria-label="Three-tier test pyramid">
 
-      <!-- Tier 3: Integration (top, narrow) -->
+      <!-- Tier 3: Smoke (top, narrow) -->
       <g class="tier-3">
-        <polygon points="250,30 310,90 190,90" fill="rgba(210,153,34,.25)" stroke="#D29922" stroke-width="1.5"/>
-        <text x="250" y="68" text-anchor="middle" fill="#D29922" font-size="10" font-weight="600">Integration</text>
-        <text x="250" y="81" text-anchor="middle" fill="#D29922" font-size="9">10 tests · real SF</text>
+        <polygon points="250,10 280,50 220,50" fill="rgba(210,153,34,.18)" stroke="#D29922" stroke-width="1"/>
+        <text x="250" y="37" text-anchor="middle" fill="#D29922" font-size="9" font-weight="600">Smoke</text>
+        <text x="250" y="47" text-anchor="middle" fill="#D29922" font-size="8">3 tests · live URL</text>
       </g>
 
-      <!-- Tier 2: CI (middle) -->
-      <g class="tier-2">
+      <!-- Tier 2: Integration (upper middle) -->
+      <g class="tier-2" style="animation-delay:.3s">
+        <polygon points="220,50 280,50 310,90 190,90" fill="rgba(210,153,34,.2)" stroke="#D29922" stroke-width="1.5"/>
+        <text x="250" y="73" text-anchor="middle" fill="#D29922" font-size="10" font-weight="600">Integration</text>
+        <text x="250" y="83" text-anchor="middle" fill="#D29922" font-size="9">11 tests · real SF</text>
+      </g>
+
+      <!-- Tier 1: CI (middle) -->
+      <g class="tier-1" style="animation-delay:.8s">
         <polygon points="190,90 310,90 360,150 140,150" fill="rgba(41,181,232,.18)" stroke="#29B5E8" stroke-width="1.5"/>
         <text x="250" y="123" text-anchor="middle" fill="#29B5E8" font-size="11" font-weight="600">GitHub Actions CI</text>
-        <text x="250" y="139" text-anchor="middle" fill="#8B949E" font-size="9">unit + ruff · on every push</text>
+        <text x="250" y="139" text-anchor="middle" fill="#8B949E" font-size="9">unit (3.11+3.12) + arch + lint</text>
       </g>
 
-      <!-- Tier 1: Unit (base, widest) -->
-      <g class="tier-1">
+      <!-- Tier 0: Unit (base, widest) -->
+      <g style="animation-delay:1.3s">
         <polygon points="140,150 360,150 420,200 80,200" fill="rgba(63,185,80,.2)" stroke="#3FB950" stroke-width="1.5"/>
         <text x="250" y="178" text-anchor="middle" fill="#3FB950" font-size="12" font-weight="600">Unit Tests</text>
-        <text x="250" y="194" text-anchor="middle" fill="#8B949E" font-size="9">46 tests · no Snowflake · ~3s</text>
+        <text x="250" y="194" text-anchor="middle" fill="#8B949E" font-size="9">55 tests · no Snowflake · ~2s</text>
       </g>
     </svg>
   </div>
@@ -189,7 +196,7 @@ SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo \
   <div class="reveal">
     <div class="code-block">
       <div class="code-block-header"><span>bash — run tests</span><button class="copy-btn">Copy</button></div>
-      <pre># TDD inner loop: unit tests (Snowpark local testing + AppTest, ~3s, 100% coverage)
+      <pre># TDD inner loop: unit tests (Snowpark local testing + AppTest, ~2s, 100% coverage)
 # Ref: https://docs.snowflake.com/en/developer-guide/snowpark/python/testing-locally
 # Ref: https://docs.streamlit.io/develop/api-reference/app-testing
 make test                                     # or: uv run pytest tests/unit/ -v
@@ -199,11 +206,15 @@ make test-watch
 
 # Integration tests (real Snowflake, ~60s, temp schema auto-cleaned)
 make test-integration
-# or: SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo uv run pytest tests/integration/ -v
+# or: SNOWFLAKE_DEFAULT_CONNECTION_NAME=my-snowflake uv run pytest tests/integration/ -v
+
+# Smoke tests (deployed app, HTTP only, ~5s)
+# GIT_SIS_APP_URL is set automatically in CI; set it manually for local:
+make test-smoke GIT_SIS_APP_URL=https://your-app-url
 
 # Cross-validate unit tests against real Snowflake
 make test-live
-# or: SNOWFLAKE_DEFAULT_CONNECTION_NAME=oregon-sedemo uv run pytest tests/unit/ -v --snowflake-session=live</pre>
+# or: SNOWFLAKE_DEFAULT_CONNECTION_NAME=my-snowflake uv run pytest tests/unit/ -v --snowflake-session=live</pre>
     </div>
   </div>
 
@@ -318,7 +329,7 @@ def _mock_round(value, scale=0) -> ColumnEmulator: ...
 # Creates the session + tables once for all tests in the module.
 # seeded_session (function-scoped) truncates tables between tests (~2 ms)
 # instead of recreating the session per test (~30 ms each).
-# This cut setup overhead from ~1.4 s to ~0.1 s across 46 tests.
+# This cut setup overhead from ~1.4 s to ~0.1 s across 55 tests.
 @pytest.fixture(scope="module")
 def _module_session(request) -> Session:
     """One session per module — emulator (local) or real Snowflake (live)."""
@@ -410,20 +421,29 @@ name = Business logic must not import Streamlit
 type = forbidden
 source_modules = lib.ingest
                  lib.config
-forbidden_modules = streamlit</pre>
+forbidden_modules = streamlit
+
+[importlinter:contract:components-free-of-business-logic]
+name = UI components must not import business logic directly
+type = forbidden
+source_modules = lib.components
+forbidden_modules =
+    lib.ingest
+    lib.config</pre>
     </div>
     <div class="code-block">
       <div class="code-block-header"><span>bash — run the guardrail</span><button class="copy-btn">Copy</button></div>
       <pre>cd app && uv run --project .. lint-imports
-# ✅ Contracts: 1 kept, 0 broken</pre>
+# ✅ Contracts: 2 kept, 0 broken</pre>
     </div>
     <div class="note">
       <span class="note-icon">💡</span>
       <div>
-        <strong>Why?</strong> If <code>lib/ingest.py</code> accidentally <code>import streamlit</code>,
-        unit tests still pass (streamlit is installed) but the architecture contract breaks.
-        This catches dependency creep <em>before</em> it makes testing slow or impossible.
-        CI runs this check in the <code>unit-tests</code> job.
+        <strong>Two contracts enforced:</strong>
+        (1) <code>lib.ingest</code> + <code>lib.config</code> must not import <code>streamlit</code> — keeps them emulator-testable.
+        (2) <code>lib.components</code> must not import <code>lib.ingest</code> or <code>lib.config</code> —
+        data flows in through function arguments, not module imports. This enforces the 4-layer model:
+        <code>config</code> → <code>ingest</code> → <code>components</code> → <code>pages</code>.
       </div>
     </div>
   </div>
@@ -433,18 +453,19 @@ forbidden_modules = streamlit</pre>
   <div class="reveal">
     <p>
       The Snowpark local-testing emulator doesn't support everything. Known gaps
-      that affect this project are documented in <code>docs/emulator-gaps.md</code>:
+      are documented and tested in <code>tests/unit/test_emulator_fidelity.py</code>
+      and listed in <code>docs/emulator-gaps.md</code>:
     </p>
     <ul style="font-size:13px;color:#8B949E;margin:.6rem 0">
-      <li><code>uniform()</code> — use <code>random()</code> instead in tests</li>
-      <li><code>round(col, scale)</code> — emulator ignores the scale argument</li>
-      <li><code>UUID_STRING()</code> — returns empty string; mock with <code>lit()</code></li>
+      <li><code>UUID_STRING()</code> — returns an error; mock via <code>uuid_patch</code> fixture</li>
+      <li><code>uniform()</code> / <code>round()</code> — use <code>@snowflake.snowpark.mock.patch</code></li>
       <li><code>session.sql("...")</code> — not supported; use DataFrame API instead</li>
     </ul>
     <p>
-      When you hit one of these, add a <code>@pytest.mark.skipif(IS_LOCAL, ...)</code>
-      guard and a corresponding integration test covering the real-engine path.
-      See <code>docs/emulator-gaps.md</code> for the full inventory and workarounds.
+      The fidelity tests in <code>test_emulator_fidelity.py</code> document each gap with an
+      assertion that <em>expects the gap to exist</em>. When Snowflake patches a gap, the test
+      still passes — but you know the workaround can be removed. Run
+      <code>make test-live</code> to cross-validate against the real engine.
     </p>
     <div class="note">
       <span class="note-icon">💡</span>
@@ -455,6 +476,29 @@ forbidden_modules = streamlit</pre>
         or ingestion code.
       </div>
     </div>
+  </div>
+
+  <h2 class="reveal">Pages as testable modules (render() pattern)</h2>
+
+  <div class="reveal">
+    <p>
+      All page files wrap their widget code in a <code>render(session=None)</code> function:
+    </p>
+    <div class="code-block">
+      <div class="code-block-header"><span>app/pages/1_run_history.py — render() pattern</span><button class="copy-btn">Copy</button></div>
+      <pre>st.set_page_config(page_title="Run history", page_icon="❄️", layout="wide")
+
+def render(session=None) -> None:
+    if session is None:
+        session = get_session()       # defaults to SiS or local CLI
+    # ... all widget code here ...
+
+render()   # called at module level so Streamlit executes it as a page</pre>
+    </div>
+    <p>
+      This makes pages testable in isolation: <code>AppTest.from_function(render, session=emulator_session).run()</code>.
+      It also prevents top-level <code>st.*</code> side-effects when the module is imported.
+    </p>
   </div>
 
   <!-- Footer -->

@@ -69,9 +69,9 @@
       <text x="28" y="126" fill="#8B949E" font-size="11" font-family="monospace" class="tr5">│   └── pyproject.toml  <tspan fill="#D29922">← required by container runtime</tspan></text>
       <text x="28" y="142" fill="#8B949E" font-size="11" font-family="monospace" class="tr6">├── 📁 deploy/        <tspan fill="#8B949E">(SQL setup / cleanup)</tspan></text>
       <text x="28" y="158" fill="#8B949E" font-size="11" font-family="monospace" class="tr7">├── 📁 scripts/       <tspan fill="#8B949E">(shell runners)</tspan></text>
-      <text x="28" y="174" fill="#8B949E" font-size="11" font-family="monospace" class="tr8">├── 📁 tests/         <tspan fill="#8B949E">(unit/ + integration/)</tspan></text>
-      <text x="28" y="190" fill="#8B949E" font-size="11" font-family="monospace" class="tr8">├── .pre-commit-config.yaml</text>
-      <text x="28" y="207" fill="#8B949E" font-size="11" font-family="monospace" class="tr8">└── .github/workflows/ci.yml</text>
+      <text x="28" y="174" fill="#8B949E" font-size="11" font-family="monospace" class="tr8">├── 📁 tests/         <tspan fill="#8B949E">(unit/ + integration/ + smoke/)</tspan></text>
+      <text x="28" y="190" fill="#8B949E" font-size="11" font-family="monospace" class="tr8">├── 📁 dcm/           <tspan fill="#3FB950">← declarative schema (DCM)</tspan></text>
+      <text x="28" y="207" fill="#8B949E" font-size="11" font-family="monospace" class="tr8">└── .github/workflows/  <tspan fill="#8B949E">(ci, preview, release, deploy-gitops)</tspan></text>
 
       <!-- Blinking cursor -->
       <rect x="20" y="211" width="8" height="13" fill="#29B5E8" class="cursor" rx="1"/>
@@ -138,6 +138,31 @@ snow --version   # 3.x.x</pre>
     </div>
   </div>
 
+  <h2 class="reveal">Option A — GitHub Codespaces (zero local setup)</h2>
+
+  <div class="reveal">
+    <p>
+      The repo includes a <code>.devcontainer/devcontainer.json</code> that pre-installs
+      uv, snow CLI, Python 3.11, and VS Code extensions. Click the badge in the README
+      to open a ready-to-code browser environment in seconds:
+    </p>
+    <div class="code-block">
+      <div class="code-block-header"><span>bash — after Codespace starts</span><button class="copy-btn">Copy</button></div>
+      <pre>make test   # 55 unit tests, no credentials needed — runs in the Codespace</pre>
+    </div>
+    <div class="note">
+      <span class="note-icon">💡</span>
+      <div>
+        Set <strong>Codespaces secrets</strong> to enable Snowflake-touching targets
+        (<code>make dev</code>, <code>make setup</code>, <code>make deploy</code>):
+        <code>SNOWFLAKE_DEFAULT_CONNECTION_NAME</code>, <code>GIT_SIS_DATABASE</code>,
+        <code>GIT_SIS_SCHEMA</code>. Unit tests work without any secrets.
+      </div>
+    </div>
+  </div>
+
+  <h2 class="reveal">Option B — Local development</h2>
+
   <h2 class="reveal">Clone and install dependencies</h2>
 
   <div class="reveal">
@@ -145,26 +170,46 @@ snow --version   # 3.x.x</pre>
       <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
       <pre>git clone https://github.com/waldekkot/git-sis
 cd git-sis
-uv sync          # creates .venv, installs all deps (including dev group)</pre>
+make install   # uv sync + pre-commit hooks (no Snowflake needed)</pre>
+    </div>
+    <div class="note">
+      <span class="note-icon">💡</span>
+      <div>
+        <strong>direnv</strong> (optional but recommended) automatically loads environment variables
+        when you <code>cd</code> into the project — no more forgetting to set
+        <code>SNOWFLAKE_DEFAULT_CONNECTION_NAME</code> before running make targets.
+        <div class="code-block" style="margin-top:10px">
+          <div class="code-block-header"><span>bash — one-time direnv setup</span><button class="copy-btn">Copy</button></div>
+          <pre>brew install direnv   # macOS; add eval "$(direnv hook zsh)" to ~/.zshrc
+cp .envrc.example .envrc
+# Edit .envrc: set SNOWFLAKE_DEFAULT_CONNECTION_NAME + schema vars
+direnv allow</pre>
+        </div>
+      </div>
     </div>
   </div>
 
   <h2 class="reveal">Configure your Snowflake connection</h2>
 
   <div class="reveal">
-    <p>Add a named connection to <code>~/.snowflake/connections.toml</code>:</p>
+    <p>Add a named connection using the interactive wizard — or edit <code>~/.snowflake/connections.toml</code> directly:</p>
     <div class="code-block">
-      <div class="code-block-header"><span>~/.snowflake/connections.toml</span><button class="copy-btn">Copy</button></div>
-      <pre>[oregon-sedemo]
-account          = "sfseeurope-wkot_demo1"
-user             = "wkot"
-authenticator    = "PROGRAMMATIC_ACCESS_TOKEN"
-token_file_path  = "/path/to/your/pat-token.txt"</pre>
+      <div class="code-block-header"><span>bash — interactive wizard (recommended)</span><button class="copy-btn">Copy</button></div>
+      <pre>snow connection add
+# Follow the prompts: account, username, authenticator, warehouse, role</pre>
     </div>
-
+    <div class="code-block">
+      <div class="code-block-header"><span>~/.snowflake/connections.toml — externalbrowser (SSO)</span><button class="copy-btn">Copy</button></div>
+      <pre>[my-snowflake]
+account       = "sfseeurope-myaccount"
+user          = "my_user"
+authenticator = "externalbrowser"   # opens SSO in browser — recommended
+warehouse     = "COMPUTE_WH"
+role          = "SYSADMIN"</pre>
+    </div>
     <div class="code-block">
       <div class="code-block-header"><span>bash — verify connection</span><button class="copy-btn">Copy</button></div>
-      <pre>snow connection test -c oregon-sedemo
+      <pre>snow connection test -c my-snowflake
 # Expected: ✔ Connection successful</pre>
     </div>
   </div>
@@ -173,24 +218,36 @@ token_file_path  = "/path/to/your/pat-token.txt"</pre>
 
   <div class="reveal">
     <p>
-      <code>deploy/00_setup_env.sql</code> is idempotent — safe to run multiple times.
-      It creates the <code>GIT_SIS</code> schema, <code>ORDERS</code>, and <code>INGEST_LOG</code>.
+      <code>make setup</code> runs <code>deploy/00_setup_env.sql</code> against your connection —
+      idempotent, safe to re-run. Creates the <code>GIT_SIS</code> schema,
+      <code>ORDERS</code>, and <code>INGEST_LOG</code>.
     </p>
     <div class="code-block">
       <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
-      <pre>snow sql -c oregon-sedemo -f deploy/00_setup_env.sql
-# Expected: "Setup complete" with DB and SCHEMA columns</pre>
+      <pre>make setup
+# or with a specific connection: make setup CONN=my-snowflake</pre>
+    </div>
+
+    <div class="tip" style="margin-top:12px">
+      <span class="note-icon">🌱</span>
+      <div>
+        <strong>Seed sample data</strong> for a realistic app experience right after setup:
+        <div class="code-block" style="margin-top:10px">
+          <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
+          <pre>make seed   # inserts 5 INGEST_LOG rows + 50 ORDERS rows (idempotent)</pre>
+        </div>
+      </div>
     </div>
   </div>
 
   <div class="tip reveal">
     <span class="note-icon">✅</span>
     <div>
-      <strong>Install pre-commit hooks now</strong> so every commit is quality-gated from the start.
+      <strong>Pre-commit hooks are already installed</strong> by <code>make install</code>.
+      To run all hooks manually against the whole codebase:
       <div class="code-block" style="margin-top:12px">
         <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
-        <pre>uv run pre-commit install
-# pre-commit installed at .git/hooks/pre-commit</pre>
+        <pre>make hooks   # uvx pre-commit run --all-files</pre>
       </div>
     </div>
   </div>

@@ -158,22 +158,27 @@
   <div class="diagram-wrap reveal" style="padding:20px 16px">
     <svg class="svg-anim" viewBox="0 0 600 68" fill="none" xmlns="http://www.w3.org/2000/svg"
          style="width:100%;max-width:600px" role="img" aria-label="Pre-commit hook sequence">
-      <rect class="hook-1" x="0"   y="8" width="110" height="52" rx="7" stroke="#3FB950" stroke-width="1"/>
-      <rect class="hook-2" x="122" y="8" width="110" height="52" rx="7" stroke="#3FB950" stroke-width="1"/>
-      <rect class="hook-3" x="244" y="8" width="110" height="52" rx="7" stroke="#3FB950" stroke-width="1"/>
-      <rect class="hook-4" x="366" y="8" width="225" height="52" rx="7" stroke="#3FB950" stroke-width="1"/>
+      <!-- Hook sequence: 5 hooks -->
+      <rect class="hook-1" x="0"   y="8" width="100" height="52" rx="7" stroke="#3FB950" stroke-width="1"/>
+      <rect class="hook-2" x="112" y="8" width="100" height="52" rx="7" stroke="#3FB950" stroke-width="1"/>
+      <rect class="hook-3" x="224" y="8" width="100" height="52" rx="7" stroke="#3FB950" stroke-width="1"/>
+      <rect class="hook-4" x="336" y="8" width="116" height="52" rx="7" stroke="#3FB950" stroke-width="1"/>
+      <rect class="hook-4" x="464" y="8" width="136" height="52" rx="7" stroke="#3FB950" stroke-width="1"/>
 
-      <text x="55"  y="30" text-anchor="middle" fill="#8B949E" font-size="9" font-family="monospace">trailing-ws</text>
-      <text x="55"  y="47" text-anchor="middle" fill="#8B949E" font-size="9" font-family="monospace">end-of-file</text>
+      <text x="50"  y="30" text-anchor="middle" fill="#8B949E" font-size="9" font-family="monospace">trailing-ws</text>
+      <text x="50"  y="47" text-anchor="middle" fill="#8B949E" font-size="9" font-family="monospace">end-of-file</text>
 
-      <text x="177" y="30" text-anchor="middle" fill="#FF7B72"  font-size="9" font-family="monospace">ruff check</text>
-      <text x="177" y="47" text-anchor="middle" fill="#8B949E"  font-size="9" font-family="monospace">ruff format</text>
+      <text x="162" y="30" text-anchor="middle" fill="#FF7B72"  font-size="9" font-family="monospace">ruff check</text>
+      <text x="162" y="47" text-anchor="middle" fill="#8B949E"  font-size="9" font-family="monospace">ruff format</text>
 
-      <text x="299" y="30" text-anchor="middle" fill="#D2A8FF"  font-size="9" font-family="monospace">ty check</text>
-      <text x="299" y="47" text-anchor="middle" fill="#8B949E"  font-size="9" font-family="monospace">app/lib/</text>
+      <text x="274" y="30" text-anchor="middle" fill="#D2A8FF"  font-size="9" font-family="monospace">ty check</text>
+      <text x="274" y="47" text-anchor="middle" fill="#8B949E"  font-size="9" font-family="monospace">app/lib/</text>
 
-      <text x="479" y="30" text-anchor="middle" fill="#79C0FF"  font-size="9" font-family="monospace">pytest tests/unit/</text>
-      <text x="479" y="47" text-anchor="middle" fill="#3FB950"  font-size="9" font-family="monospace">46 tests · no SF · ~3s</text>
+      <text x="394" y="30" text-anchor="middle" fill="#79C0FF"  font-size="9" font-family="monospace">lint-imports</text>
+      <text x="394" y="47" text-anchor="middle" fill="#3FB950"  font-size="9" font-family="monospace">arch check</text>
+
+      <text x="532" y="30" text-anchor="middle" fill="#79C0FF"  font-size="9" font-family="monospace">pytest tests/unit/</text>
+      <text x="532" y="47" text-anchor="middle" fill="#3FB950"  font-size="9" font-family="monospace">55 tests · no SF · ~2s</text>
     </svg>
   </div>
 
@@ -188,7 +193,7 @@
     <div class="code-block">
       <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
       <pre>make hooks   # = uvx pre-commit run --all-files
-# All 8 hooks should print "Passed"</pre>
+# All 5 hook groups should print "Passed"</pre>
     </div>
   </div>
 
@@ -221,12 +226,19 @@
         types: [python]
         pass_filenames: false
 
+      - id: import-linter
+        name: import-linter (lib must not import streamlit)
+        entry: bash -c 'cd app && uv run --project .. lint-imports'
+        language: system
+        types: [python]
+        pass_filenames: false
+
       - id: pytest-unit
         name: pytest unit (no Snowflake)
         entry: uv run pytest tests/unit/ --tb=short -q
         language: system
         types: [python]
-        pass_filenames: false  # 46 tests · ~3s</pre>
+        pass_filenames: false  # 55 tests · ~2s</pre>
     </div>
   </div>
 
@@ -311,7 +323,8 @@
 
   <div class="reveal">
     <p>
-      The <code>.github/workflows/ci.yml</code> has three jobs in sequence:
+      The <code>.github/workflows/ci.yml</code> has five jobs in sequence
+      (with the unit jobs running in a 2-Python matrix in parallel):
     </p>
     <table style="width:100%;border-collapse:collapse;font-size:13px;margin:1rem 0">
       <thead>
@@ -324,40 +337,52 @@
       </thead>
       <tbody>
         <tr style="border-bottom:1px solid #21262D">
-          <td style="padding:.4rem .6rem;font-family:monospace;color:#E6EDF3">unit-tests</td>
+          <td style="padding:.4rem .6rem;font-family:monospace;color:#E6EDF3">unit-tests-311</td>
           <td style="padding:.4rem .6rem;color:#8B949E">Every push + PR</td>
           <td style="padding:.4rem .6rem;color:#3FB950">None</td>
-          <td style="padding:.4rem .6rem;color:#8B949E">Snowpark emulator + ruff + import-linter</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Emulator + ruff + import-linter + check-docs (Python 3.11)</td>
+        </tr>
+        <tr style="border-bottom:1px solid #21262D">
+          <td style="padding:.4rem .6rem;font-family:monospace;color:#E6EDF3">unit-tests-312</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Every push + PR</td>
+          <td style="padding:.4rem .6rem;color:#3FB950">None</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Same suite on Python 3.12 (forwards-compat signal)</td>
         </tr>
         <tr style="border-bottom:1px solid #21262D">
           <td style="padding:.4rem .6rem;font-family:monospace;color:#E6EDF3">integration-tests</td>
           <td style="padding:.4rem .6rem;color:#8B949E">Push to main</td>
           <td style="padding:.4rem .6rem;color:#D29922">OIDC (env:ci)</td>
-          <td style="padding:.4rem .6rem;color:#8B949E">Real Snowflake, disposable <code>GIT_SIS_TEST_&lt;uuid&gt;</code> schema</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Real Snowflake, isolated <code>GIT_SIS_TEST_&lt;uuid&gt;</code> schemas, parallel</td>
+        </tr>
+        <tr style="border-bottom:1px solid #21262D">
+          <td style="padding:.4rem .6rem;font-family:monospace;color:#E6EDF3">dcm-plan</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Push to main</td>
+          <td style="padding:.4rem .6rem;color:#D29922">OIDC (env:ci)</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Previews DDL changes; blocks on destructive ops (add <code>[skip-dcm]</code> until set up)</td>
         </tr>
         <tr>
           <td style="padding:.4rem .6rem;font-family:monospace;color:#E6EDF3">deploy-to-sis</td>
           <td style="padding:.4rem .6rem;color:#8B949E">Push to main</td>
           <td style="padding:.4rem .6rem;color:#FF7B72">OIDC (env:prod)</td>
-          <td style="padding:.4rem .6rem;color:#8B949E">Deploys app + requires manual approval</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Deploys app + commits <code>MAIN_&lt;sha&gt;</code> version alias + pytest smoke tests</td>
         </tr>
       </tbody>
     </table>
     <div class="note">
       <span class="note-icon">💡</span>
       <div>
-        <strong>Why unit tests run without credentials:</strong> The Snowpark local-testing
-        emulator (<code>local_testing=True</code>) creates an in-memory DataFrame engine.
-        No network, no Snowflake account needed. This means PRs from forks can still
-        run the full unit test suite safely.
+        <strong>Concurrency groups</strong> prevent deploy races:
+        pushes to main queue (the second waits for the first to finish);
+        PR builds cancel stale runs (only the latest commit matters for previews).
+        This is critical when <code>ALTER STREAMLIT COMMIT VERSION</code> is in the mix.
       </div>
     </div>
   </div>
 
   <div class="reveal">
-    <h3>The CI workflow (OIDC)</h3>
+    <h3>The CI workflow (key structure)</h3>
     <div class="code-block">
-      <div class="code-block-header"><span>.github/workflows/ci.yml</span><button class="copy-btn">Copy</button></div>
+      <div class="code-block-header"><span>.github/workflows/ci.yml (key structure)</span><button class="copy-btn">Copy</button></div>
       <pre>name: CI
 
 on:
@@ -365,67 +390,47 @@ on:
     branches: [main]
   pull_request:
 
-permissions:
-  id-token: write   # ← required for OIDC token request
-  contents: read
+# Queue deploys to main; cancel stale PR runs
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  unit-tests:
-    name: Unit tests + lint (no Snowflake)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-        with: { version: "latest", enable-cache: true }
-      - run: uv sync
-      - run: uv run ruff check app/
-      - run: uv run pytest tests/unit/ -v --tb=short
-      - run: cd app && uv run --project .. lint-imports
+  # Reusable workflow called twice: Python 3.11 (SiS runtime) + 3.12 (compat)
+  unit-tests-311:
+    uses: ./.github/workflows/reusable-unit-tests.yml
+    with: { python-version: "3.11" }
+
+  unit-tests-312:
+    uses: ./.github/workflows/reusable-unit-tests.yml
+    with: { python-version: "3.12" }
 
   integration-tests:
-    name: Integration tests (OIDC → real Snowflake)
-    runs-on: ubuntu-latest
-    needs: unit-tests
+    needs: [unit-tests-311, unit-tests-312]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    environment: ci                     # ← scopes OIDC subject
+    environment: ci                     # ← scopes OIDC subject to ci env
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-        with: { version: "latest", enable-cache: true }
-      - uses: snowflakedb/snowflake-cli-action@v2
-        with:
-          cli-version: "latest"
-          default-config-file-path: __skip__
-          use-oidc: true
-          oidc-token-name: SNOWFLAKE_CONNECTIONS_CI_TOKEN
-      - uses: ./.github/actions/setup-snowflake
-        with:
-          sf-account: ${{ vars.SF_ACCOUNT }}
-          sf-user: ${{ vars.SF_USER_CI }}
-          connection-name: ci
-      - run: uv sync
-      - run: uv run pytest tests/integration/ -v --tb=short -n 5
-        env: { SNOWFLAKE_DEFAULT_CONNECTION_NAME: ci }
+      - uses: actions/checkout@&lt;sha&gt;   # SHA-pinned (Dependabot maintains)
+      - uses: snowflakedb/snowflake-cli-action@&lt;sha&gt;
+        with: { use-oidc: true, oidc-token-name: SNOWFLAKE_CONNECTIONS_CI_TOKEN }
+      - run: uv run pytest tests/integration/ -v -n 5
+
+  dcm-plan:
+    needs: integration-tests
+    environment: ci
+    steps:
+      - run: snow dcm plan --project-name $DB.$SCHEMA.GIT_SIS_DCM --source dcm/
+        continue-on-error: true  # non-blocking until DCM project object is created
 
   deploy-to-sis:
-    name: Deploy to SiS (prod approval gate)
-    runs-on: ubuntu-latest
-    needs: integration-tests
-    environment: prod                   # ← requires reviewer approval
+    needs: [integration-tests, dcm-plan]
+    environment: prod               # ← requires reviewer approval
     steps:
-      - uses: actions/checkout@v4
-      - uses: snowflakedb/snowflake-cli-action@v2
-        with:
-          cli-version: "latest"
-          default-config-file-path: __skip__
-          use-oidc: true
-          oidc-token-name: SNOWFLAKE_CONNECTIONS_PROD_TOKEN
-      - uses: ./.github/actions/setup-snowflake
-        with:
-          sf-account: ${{ vars.SF_ACCOUNT }}
-          sf-user: ${{ vars.SF_USER_PROD }}
-          connection-name: prod
-      - run: scripts/30_deploy.sh -c prod</pre>
+      - run: scripts/30_deploy.sh -c ci
+      - run: |                      # commit MAIN_&lt;sha&gt; version alias (rollback point)
+          snow sql -c ci -q "ALTER STREAMLIT ... ADD VERSION IF NOT EXISTS MAIN_$SHA FROM LAST"
+      - run: uv run pytest tests/smoke/ -v
+        env: { GIT_SIS_APP_URL: ${{ steps.app-url.outputs.url }} }</pre>
     </div>
   </div>
 
@@ -444,30 +449,20 @@ on:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
     environment: prod
-    permissions: { id-token: write, contents: read }
     steps:
-      - uses: actions/checkout@v4
-      - uses: snowflakedb/snowflake-cli-action@v2
-        with: { cli-version: "latest", default-config-file-path: __skip__,
-                use-oidc: true, oidc-token-name: SNOWFLAKE_CONNECTIONS_PROD_TOKEN }
-      - uses: ./.github/actions/setup-snowflake
-        with: { sf-account: ${{ vars.SF_ACCOUNT }}, sf-user: ${{ vars.SF_USER_PROD }},
-                connection-name: prod }
-      - name: Deploy + commit version
-        run: |
-          scripts/30_deploy.sh -c prod
-          # v1.2.3 → V1_2_3 (Snowflake identifier rules)
-          ALIAS=$(echo "${GITHUB_REF_NAME}" | tr '.-' '__' | tr '[:lower:]' '[:upper:]')
-          snow sql -c prod -q "ALTER STREAMLIT ... COMMIT VERSION $ALIAS"</pre>
+      - run: scripts/30_deploy.sh -c ci --commit "${{ github.ref_name }}"
+        # v1.2.3 → V1_2_3 (Snowflake identifier rules)
+        # Commits as a stable, immutable version alias</pre>
     </div>
     <div class="note">
       <span class="note-icon">💡</span>
       <div>
-        <strong>Rollback from any version:</strong><br>
-        <code>ALTER STREAMLIT ... SET DEFAULT_VERSION = V1_1_0;</code><br>
-        Instant. No redeploy. See <code>docs/runbook.md</code> for the full procedure.
+        <strong>Version aliases available for rollback:</strong><br>
+        • <code>MAIN_&lt;sha&gt;</code> — every CI deploy to main (automatic)<br>
+        • <code>V1_2_3</code> — every tagged release (manual)<br>
+        Rollback: <code>ALTER STREAMLIT ... SET DEFAULT_VERSION = &lt;alias&gt;;</code>
+        — seconds, no redeploy. See <code>docs/runbook.md</code>.
       </div>
     </div>
   </div>

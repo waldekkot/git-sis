@@ -111,8 +111,12 @@ automatically from both Snowsight and the CLI.
 ## Run it
 
 ```bash
-# 0. Install deps + pre-commit hooks
-uv sync && uv run pre-commit install
+# 0. Install deps + pre-commit hooks (no Snowflake needed)
+make install
+
+# Optional: configure direnv for automatic connection switching (recommended)
+cp .envrc.example .envrc   # edit SNOWFLAKE_DEFAULT_CONNECTION_NAME + schema vars
+direnv allow               # loads env vars automatically when you cd into this dir
 
 # 1. One-time: create GIT_SIS schema + tables
 scripts/10_setup.sh

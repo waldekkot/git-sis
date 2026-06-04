@@ -1,0 +1,35 @@
+# .envrc — direnv environment for git-sis
+#
+# Copy this file: cp .envrc.example .envrc
+# Then activate:  direnv allow
+#
+# direnv automatically loads/unloads these variables when you cd into/out of
+# this directory. No more forgetting to switch connections, no more accidental
+# deploys to the wrong account.
+#
+# Install direnv: brew install direnv
+# Hook into your shell (add to ~/.zshrc or ~/.bashrc):
+#   eval "$(direnv hook zsh)"   # or bash / fish
+#
+# Prerequisites: Snowflake CLI connection configured.
+#   snow connection add --connection-name <name>
+#   snow connection list    # to see available connections
+
+# ── Snowflake connection ───────────────────────────────────────────────────────
+# Name of the connection in ~/.snowflake/config.toml used by make targets and
+# snow CLI commands. Override per-directory if you work with multiple accounts.
+export SNOWFLAKE_DEFAULT_CONNECTION_NAME=default
+
+# ── Target environment ─────────────────────────────────────────────────────────
+# These are picked up by app/snowflake.yml (via ctx.env.*) and scripts/30_deploy.sh.
+# Change to point at a personal sandbox schema while developing a feature.
+export GIT_SIS_DATABASE=SNOWFLAKE_LEARNING_DB
+export GIT_SIS_SCHEMA=GIT_SIS
+export GIT_SIS_APP_NAME=INGEST_CONSOLE
+export GIT_SIS_WAREHOUSE=COMPUTE_WH
+
+# ── Optional: personal sandbox override ───────────────────────────────────────
+# Uncomment to deploy to a personal schema instead of the shared dev schema.
+# Useful when developing a feature that requires schema changes.
+# export GIT_SIS_SCHEMA=GIT_SIS_DEV_$(echo $USER | tr '[:lower:]' '[:upper:]')
+# export GIT_SIS_APP_NAME=INGEST_CONSOLE_DEV

@@ -17,6 +17,9 @@ token/
 # OS
 .DS_Store
 
+# direnv (local env overrides — copy from .envrc.example)
+.envrc
+
 # CoCo / IDE artifacts
 .snowflake/
 .coverage

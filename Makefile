@@ -171,6 +171,9 @@ arch:  ## Enforce layering: lib.ingest/config must not import streamlit (import-
 hooks:  ## Run all pre-commit hooks against every file
 	uvx pre-commit run --all-files
 
+check-docs:  ## Lint tutorial HTML for stale version references and missing Makefile targets
+	scripts/check-docs.sh
+
 # -- Help ----------------------------------------------------------------------
 
 help:  ## Show this help

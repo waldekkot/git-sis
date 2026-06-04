@@ -46,3 +46,8 @@ jobs:
         # import-linter contract in app/.importlinter; run from app/ so `lib`
         # resolves to app/lib, --project .. uses the root dev venv.
         run: cd app && uv run --project .. lint-imports
+
+      - name: Lint tutorial docs for drift
+        # Fails if tutorial HTML references stale Python/snow CLI versions
+        # or Makefile targets that no longer exist.
+        run: scripts/check-docs.sh

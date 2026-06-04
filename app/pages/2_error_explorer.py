@@ -1,4 +1,10 @@
-"""Error explorer - drill into FAILED runs and their captured messages."""
+"""Error explorer - drill into FAILED runs and their captured messages.
+
+Page pattern: all widget code lives inside render(session). This makes the
+page testable in isolation:
+    AppTest.from_function(render, session=mock_session).run()
+and importable without side effects (no top-level st.* calls after config).
+"""
 
 from __future__ import annotations
 
@@ -7,22 +13,35 @@ from lib.config import INGEST_LOG_TABLE
 from lib.session import get_session
 
 st.set_page_config(page_title="Error explorer", page_icon="❄️", layout="wide")
-session = get_session()
 
-st.title("Error explorer")
 
-failed = session.sql(
-    f"""
+def render(session=None) -> None:
+    """Render the error explorer page.
+
+    Args:
+        session: Snowpark session. Defaults to get_session() (SiS or local CLI).
+                 Pass an explicit session in tests to inject an emulator session.
+    """
+    if session is None:
+        session = get_session()
+
+    st.title("Error explorer")
+
+    failed = session.sql(
+        f"""
         SELECT RUN_ID, PROC_NAME, ERROR_MSG, STARTED_AT, ENDED_AT
         FROM {INGEST_LOG_TABLE}
         WHERE STATUS = 'FAILED'
         ORDER BY STARTED_AT DESC
         LIMIT 200
         """
-).to_pandas()
+    ).to_pandas()
 
-if failed.empty:
-    st.success("No failed runs recorded. The error path is clean.")
-else:
-    st.error(f"{len(failed)} failed run(s) recorded.")
-    st.dataframe(failed, use_container_width=True, hide_index=True)
+    if failed.empty:
+        st.success("No failed runs recorded. The error path is clean.")
+    else:
+        st.error(f"{len(failed)} failed run(s) recorded.")
+        st.dataframe(failed, use_container_width=True, hide_index=True)
+
+
+render()

@@ -4,7 +4,8 @@
 # Drops SNOWFLAKE_LEARNING_DB.GIT_SIS_PR_<pr_number> CASCADE.
 # No-ops gracefully if the schema was never created (IF EXISTS).
 #
-# Skipped for fork PRs (no secrets available).
+# Auth: OIDC (same as preview.yml), environment: preview.
+# Skipped for fork PRs (no OIDC id-token available).
 
 name: PR Preview Cleanup
 
@@ -12,27 +13,39 @@ on:
   pull_request:
     types: [closed]
 
+# Only one cleanup per PR at a time (re-close race).
+concurrency:
+  group: preview-cleanup-pr-${{ github.event.number }}
+  cancel-in-progress: false
+
 jobs:
   cleanup:
     name: Drop PR preview schema
     runs-on: ubuntu-latest
-    # Only for non-fork PRs — forks don't have access to repository secrets.
+    # Only for non-fork PRs — forks don't have access to OIDC id-token.
     if: github.event.pull_request.head.repo.full_name == github.repository
+    environment: preview
+    permissions:
+      id-token: write
+      contents: read
     env:
       PREVIEW_DB: SNOWFLAKE_LEARNING_DB
       PREVIEW_SCHEMA: GIT_SIS_PR_${{ github.event.number }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
-      - uses: snowflakedb/snowflake-cli-action@v2
+      - uses: snowflakedb/snowflake-cli-action@cea89ff4adad9ac1ff82dd767433bee926342d02  # v2.0.2
         with:
+          use-oidc: true
           cli-version: "3.19"
-          default-config-file-path: ""
+          oidc-token-name: SNOWFLAKE_CONNECTIONS_CI_TOKEN
+          default-config-file-path: __skip__
 
       - uses: ./.github/actions/setup-snowflake
         with:
-          sf-pat-token: ${{ secrets.SF_PAT_TOKEN }}
+          sf-account: ${{ vars.GIT_SIS_SF_ACCOUNT || 'sfseeurope-wkot_demo1' }}
+          sf-user: ${{ vars.GIT_SIS_SF_USER_PREVIEW || 'CI_SVC_PREVIEW' }}
 
       - name: Drop preview schema
         run: |

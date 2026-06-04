@@ -1,0 +1,34 @@
+# Dependabot — automated dependency updates
+#
+# Keeps GitHub Actions SHA-pinned (supply chain hardening) and uv lockfile
+# up to date. Each category opens a weekly PR so updates are small and
+# reviewable, not batched into surprise upgrades.
+
+version: 2
+updates:
+  # GitHub Actions — bumps SHA-pinned actions to newer versions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "chore(ci)"
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+  # Python / uv — bumps uv.lock to pick up security patches
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+      - "python"
+    # Only open PRs for runtime + dev deps (ignore indirect)
+    allow:
+      - dependency-type: "direct"

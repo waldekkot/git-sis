@@ -1,0 +1,158 @@
+# Pull-based GitOps deploy workflow
+#
+# Demonstrates the GitOps deploy pattern for SiS: Snowflake reads directly
+# from the Git repository via ALTER GIT REPOSITORY FETCH + ALTER STREAMLIT
+# ADD VERSION FROM @REPO/branches/<branch>.
+#
+# Why pull-based?
+#   - The artifact in Snowflake is traceable to a specific git commit hash.
+#   - No file upload step — the deploy is a pointer update.
+#   - Snowflake's audit trail points to the exact git SHA, not a CI run.
+#   - Instant rollback: ALTER STREAMLIT SET DEFAULT_VERSION = <prior_alias>.
+#
+# Prerequisites (run once):
+#   make setup-git  — creates APP_REPO + API integration (Snowflake GitHub App OAuth2)
+#   After that, authorize the GitHub App in Snowsight (one-time per user):
+#     Snowsight → Projects → any Workspace → Files tab → Connect Git Repository
+#
+# Contrast with push-based (ci.yml deploy-to-sis):
+#   Push-based  — CI uploads files to stage, reliable without git wiring
+#   Pull-based  — Snowflake fetches from GitHub, requires APP_REPO + OAuth2
+#
+# See docs/WAYS-OF-WORKING.md §3 for the full comparison.
+
+name: Deploy (GitOps / pull-based)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        type: environment
+        required: true
+        default: "prod"
+      branch:
+        description: "Branch to deploy from (defaults to main)"
+        type: string
+        default: "main"
+
+# Queue deploys to the same environment — never race.
+concurrency:
+  group: gitops-deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-pull:
+    name: Pull-based deploy (${{ inputs.environment }}, branch ${{ inputs.branch }})
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+
+    env:
+      GIT_SIS_DATABASE: ${{ vars.GIT_SIS_DATABASE || 'SNOWFLAKE_LEARNING_DB' }}
+      GIT_SIS_SCHEMA:   ${{ vars.GIT_SIS_SCHEMA   || 'GIT_SIS' }}
+      GIT_SIS_APP_NAME: ${{ vars.GIT_SIS_APP_NAME  || 'INGEST_CONSOLE' }}
+      # Sanitized version alias: main → MAIN, v1.2.3 → V1_2_3 (Snowflake identifier rules)
+      VERSION_ALIAS: ""
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a  # v4.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - uses: snowflakedb/snowflake-cli-action@cea89ff4adad9ac1ff82dd767433bee926342d02  # v2.0.2
+        with:
+          use-oidc: true
+          cli-version: "3.19"
+          oidc-token-name: SNOWFLAKE_CONNECTIONS_CI_TOKEN
+          default-config-file-path: __skip__
+
+      - uses: ./.github/actions/setup-snowflake
+        with:
+          sf-account: ${{ vars.GIT_SIS_SF_ACCOUNT || 'sfseeurope-wkot_demo1' }}
+          # Use the environment-specific SERVICE user
+          sf-user: >-
+            ${{
+              inputs.environment == 'prod' && (vars.GIT_SIS_SF_USER_PROD || 'CI_SVC_PROD') ||
+              inputs.environment == 'ci'   && (vars.GIT_SIS_SF_USER_CI   || 'CI_SVC_CI')   ||
+              vars.GIT_SIS_SF_USER_PROD || 'CI_SVC_PROD'
+            }}
+
+      - name: Fetch latest commits from GitHub into Snowflake git repo
+        # This updates Snowflake's local mirror of the GitHub repository.
+        # Without FETCH, Snowflake would deploy the last-fetched state (potentially stale).
+        run: |
+          REPO_FQN="${GIT_SIS_DATABASE}.${GIT_SIS_SCHEMA}.APP_REPO"
+          snow sql -c ci -q "ALTER GIT REPOSITORY ${REPO_FQN} FETCH;"
+          echo "Fetched latest commits from GitHub into ${REPO_FQN}"
+
+      - name: Compute version alias
+        id: version
+        run: |
+          BRANCH="${{ inputs.branch }}"
+          SHORT_SHA="${{ github.sha }}"
+          SHORT_SHA="${SHORT_SHA:0:7}"
+          # Sanitize: replace . - / with _, uppercase → valid Snowflake identifier
+          RAW="${BRANCH}_${SHORT_SHA}"
+          ALIAS=$(echo "$RAW" | tr '[:lower:].-/' '[:upper:]___')
+          echo "alias=${ALIAS}" >> "$GITHUB_OUTPUT"
+          echo "Version alias: ${ALIAS}"
+
+      - name: Add version from git repository and set as default
+        run: |
+          BRANCH="${{ inputs.branch }}"
+          ALIAS="${{ steps.version.outputs.alias }}"
+          APP_FQN="${GIT_SIS_DATABASE}.${GIT_SIS_SCHEMA}.${GIT_SIS_APP_NAME}"
+          REPO_FQN="${GIT_SIS_DATABASE}.${GIT_SIS_SCHEMA}.APP_REPO"
+
+          # Add a named version pointing at the branch tip (resolved at FETCH time)
+          snow sql -c ci -q "
+            ALTER STREAMLIT ${APP_FQN}
+              ADD VERSION IF NOT EXISTS ${ALIAS}
+              FROM @${REPO_FQN}/branches/${BRANCH}/
+              COMMENT = 'GitOps deploy: branch=${BRANCH} sha=${{ github.sha }}';"
+
+          # Atomically flip traffic to the new version
+          snow sql -c ci -q "
+            ALTER STREAMLIT ${APP_FQN}
+              SET DEFAULT_VERSION = ${ALIAS};"
+
+          echo "Deployed and set default version to ${ALIAS}"
+
+      - name: Capture deployed app URL
+        id: app-url
+        run: |
+          APP_FQN="${GIT_SIS_DATABASE}.${GIT_SIS_SCHEMA}.${GIT_SIS_APP_NAME}"
+          URL=$(snow streamlit get-url -c ci "$APP_FQN" 2>&1) || URL=""
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Post-deploy smoke check (shell)
+        run: scripts/40_verify.sh -c ci
+
+      - name: Post-deploy smoke tests (pytest)
+        if: steps.app-url.outputs.url != ''
+        run: uv run pytest tests/smoke/ -v --tb=short --no-cov
+        env:
+          GIT_SIS_APP_URL: ${{ steps.app-url.outputs.url }}
+
+      - name: Summary
+        run: |
+          echo "### GitOps deploy complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Environment | \`${{ inputs.environment }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Branch | \`${{ inputs.branch }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Git SHA | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Version alias | \`${{ steps.version.outputs.alias }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| URL | ${{ steps.app-url.outputs.url }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Rollback:** \`ALTER STREAMLIT ... SET DEFAULT_VERSION = <prior_alias>\`" >> "$GITHUB_STEP_SUMMARY"

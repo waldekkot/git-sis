@@ -130,6 +130,22 @@ make test ──────────┘                merge → main deploy
 This repo supports all three (`make deploy`, `make deploy-git`/`deploy-sql`, and the
 Workspace flow). Keeping tri-modal support is itself a blueprint feature.
 
+### 3.1 Pull-based GitOps deploy (`.github/workflows/deploy-gitops.yml`)
+
+Once `make setup-git` has been run (APP_REPO exists + GitHub App OAuth2 authorized),
+the `Deploy (GitOps / pull-based)` workflow is the *preferred* production deploy path.
+
+Trigger: `workflow_dispatch` → choose environment + branch.
+
+What it does:
+1. `ALTER GIT REPOSITORY APP_REPO FETCH` — updates Snowflake's mirror
+2. `ALTER STREAMLIT ADD VERSION <alias> FROM @APP_REPO/branches/<branch>/`
+3. `ALTER STREAMLIT SET DEFAULT_VERSION = <alias>` — atomic traffic flip
+4. Runs pytest smoke tests against the live URL
+
+Version alias format: `<BRANCH>_<SHORT_SHA>` (e.g. `MAIN_A1B2C3D`).
+Rollback: `ALTER STREAMLIT SET DEFAULT_VERSION = <prior_alias>` (see `docs/runbook.md`).
+
 ---
 
 ## 4. Inner-loop improvements (developer velocity)

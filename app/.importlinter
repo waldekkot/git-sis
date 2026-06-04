@@ -8,6 +8,10 @@
 # `lib.session` is intentionally EXEMPT — the session seam (§1.1) is the one
 # place allowed to import streamlit (for @st.cache_resource).
 #
+# `lib.components` CAN import streamlit (it IS a UI layer), but must not
+# import business logic (lib.ingest / lib.config) directly — data flows
+# in through function arguments, not module imports.
+#
 # Run from the app/ directory (so `lib` resolves to app/lib):
 #   cd app && uv run lint-imports        # or: make arch
 [importlinter]
@@ -22,3 +26,12 @@ source_modules =
     lib.config
 forbidden_modules =
     streamlit
+
+[importlinter:contract:components-free-of-business-logic]
+name = UI components must not import business logic directly
+type = forbidden
+source_modules =
+    lib.components
+forbidden_modules =
+    lib.ingest
+    lib.config

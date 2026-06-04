@@ -18,12 +18,12 @@ amendment, and developer speed across both the **inner loop** (laptop/emulator) 
 | Area | Maturity | Notes |
 |---|---|---|
 | Inner loop (Dev) | ★★★★☆ | Local-testing emulator + AppTest + session seam + watch mode. Gap: reproducible env, connection ergonomics. |
-| Modularity / testability | ★★★★★ | `lib/` (logic, Streamlit-free) vs `pages/` (UI) vs `session.py` (one seam). |
-| CI gating | ★★★★☆ | 3-stage gate (unit → integration → deploy). Gap: action pinning, concurrency, post-deploy smoke. |
-| GitOps / previews | ★★★★★ | Per-PR isolated schema + auto URL comment + teardown. |
-| Release mgmt / rollback | ★★☆☆☆ | `--commit ALIAS` plumbing exists; versioning/rollback not yet a policy. **Biggest gap.** |
-| Env promotion (dev→prod) | ★★★☆☆ | Multi-env via `ctx.env`; no gated prod environment / approvals. |
-| Secrets posture | ★★★★☆ | **Git auth = GitHub App OAuth2 (no PAT, no rotation).** CI→Snowflake still PAT; OIDC recommended. |
+| Modularity / testability | ★★★★★ | `lib/` (logic, Streamlit-free) vs `pages/` (UI) vs `session.py` (one seam). Enforced by `import-linter`. |
+| CI gating | ★★★★★ | 3-stage gate (unit → integration → deploy). OIDC auth. Prod approval gate. import-linter in CI. |
+| GitOps / previews | ★★★★★ | Per-PR isolated schema + auto URL comment + teardown (OIDC, env:preview). |
+| Release mgmt / rollback | ★★★★★ | Semver tags → `release.yml` → `COMMIT VERSION` → instant rollback via `SET DEFAULT_VERSION`. |
+| Env promotion (dev→prod) | ★★★★★ | GitHub Environments (ci/preview/prod) with required reviewer gate on prod. |
+| Secrets posture | ★★★★★ | **Zero stored secrets.** Git = OAuth2 (GitHub App). CI = OIDC (Workload Identity Federation). No PATs anywhere. |
 
 ---
 
@@ -46,10 +46,27 @@ Everything above it (ingestion logic, UI) is identical in both environments. **T
 no other file may branch on environment.** "Write once, run in two places."
 
 ### 1.2 Layering that makes logic testable
-- `lib/ingest.py`, `lib/config.py` — business logic, **never import `streamlit`**.
-- `pages/`, `streamlit_app.py` — thin UI only.
-- Result: logic is unit-testable with zero Streamlit runtime. Enforce this boundary
-  mechanically (see §4.5), not by discipline.
+
+Four-layer model, from innermost (data) to outermost (UI):
+
+```
+lib/config.py          table FQNs (env-var overridable, Streamlit-free)
+     ↓ imported by
+lib/ingest.py          Snowpark DataFrame logic (Streamlit-free, emulator-testable)
+     ↓ data passed as args to
+lib/components/        shared UI components (CAN import streamlit, no lib.ingest/config import)
+     ↓ called from
+lib/session.py         session seam (only file with @st.cache_resource)
+pages/, streamlit_app.py  thin UI orchestration
+```
+
+Contracts (enforced by `import-linter`, `make arch`, and pre-commit):
+- `lib.ingest` + `lib.config` → **forbidden**: `streamlit`
+- `lib.components` → **forbidden**: `lib.ingest`, `lib.config`
+  (data flows in through function arguments, not module imports)
+
+Result: logic is unit-testable with zero Streamlit runtime. Enforce this boundary
+mechanically (see `app/.importlinter`), not by discipline.
 
 ### 1.3 Snowpark local-testing emulator drives the inner loop
 Unit tests run in-process (`Session.builder.config("local_testing", True)`), **no
@@ -168,31 +185,31 @@ load a fixed fixture so every dev's local app looks identical. *Impact: med · E
 
 ## 5. Outer-loop improvements (DevOps / GitOps)
 
-### 5.1 Versioned releases + rollback runbook — the biggest gap
-SiS supports `ALTER STREAMLIT … ADD VERSION / COMMIT / SET DEFAULT_VERSION / ABORT`. Today
-`--commit ALIAS` is plumbing without a policy. Wire it up:
+### 5.1 Versioned releases + rollback runbook — ✅ IMPLEMENTED
+SiS supports `ALTER STREAMLIT … ADD VERSION / COMMIT / SET DEFAULT_VERSION / ABORT`.
 
-- On merge to `main`: deploy → `ADD LIVE VERSION FROM LAST` → `COMMIT VERSION v<git-sha>`.
-- Keep the last N versions.
+- On `v*.*.*` tag push: `release.yml` deploys → `COMMIT VERSION V<sanitized_tag>`.
 - **Rollback = `ALTER STREAMLIT … SET DEFAULT_VERSION = <prior>`** (seconds, no redeploy).
-- Document it in `docs/runbook.md`.
+- Full procedure documented in `docs/runbook.md`.
+- Tag naming: `v1.2.3` → `V1_2_3` (dots/dashes become underscores for Snowflake identifiers).
 
-This turns "deploy" into "release management." *Impact: high · Effort: med.*
+### 5.2 GitHub Environments + prod approval gate — ✅ IMPLEMENTED
+Three environments: `ci` (auto, integration tests), `preview` (auto, PR ephemeral), `prod`
+(required reviewer gate). OIDC subject is scoped per-environment. Prod deploy pauses until
+a maintainer approves.
 
-### 5.2 GitHub Environments + prod approval gate
-`main → deploy` is currently ungated. Introduce a `dev` environment (auto-deploy) and a
-`prod` environment with **required reviewers**; scope the prod connection/secret to the
-`prod` environment only. *Impact: high · Effort: low.*
-
-### 5.3 Secrets posture — two distinct secrets, track them separately
-- **Git auth (Snowflake → GitHub): SOLVED.** The repo now uses the **GitHub App OAuth2
-  flow** — each user authorises in-browser once; Snowflake manages the tokens. No PAT, no
-  client secret, no rotation. This is the recommended pattern; carry it to every repo.
-- **CI auth (GitHub Actions → Snowflake): still `SF_PAT_TOKEN`.** Upgrade to **OIDC**
-  (`snowflakedb/snowflake-cli-action@v2` with `use-oidc: true` + job `permissions:
-  { id-token: write }`). The path is already documented in `docs/oidc-setup.md` and the
-  `ci.yml` header. Removing `SF_PAT_TOKEN` afterwards makes the whole pipeline secretless.
-*Impact: high (security) · Effort: low — already scoped.*
+### 5.3 Secrets posture — ✅ FULLY SECRETLESS
+- **Git auth (Snowflake → GitHub):** GitHub App OAuth2 — no PAT, no rotation.
+- **CI auth (GitHub Actions → Snowflake):** OIDC via Workload Identity Federation.
+  `snowflakedb/snowflake-cli-action@v2` with `use-oidc: true`. SERVICE users per environment
+  (`CI_SVC_CI`, `CI_SVC_PREVIEW`, `CI_SVC_PROD`) with OIDC subjects. `SF_PAT_TOKEN` removed.
+- **Network policy:** Per-user `CI_GITHUB_ACTIONS_POLICY` (0.0.0.0/0) assigned only to SERVICE
+  users — doesn't weaken the account VPN policy for interactive users.
+- **Key learnings:**
+  - Snowpark `Session.builder` doesn't read `SNOWFLAKE_CONNECTIONS_*_TOKEN` env vars — must
+    write `token = "..."` inline in config.toml (masked with `::add-mask::`).
+  - `token_file_path` wraps content in an attestation envelope (wrong for raw OIDC JWT).
+  - `default-config-file-path: __skip__` avoids `cp` errors in the CLI action.
 
 ### 5.4 Supply-chain hardening on the pipeline
 - Pin GitHub Actions to **commit SHAs**, not mutable `@v4` tags.
@@ -247,8 +264,8 @@ the preview workflow already makes painless. *Impact: med · Effort: trivial.*
 | 11 | DCM/schemachange migrations (§5.6) | Outer | ★★ | ●● | todo |
 | 12 | Branch protection / required checks (§5.7) | Outer | ★★ | ● | partial (required check set in Settings) |
 
-> ✅ Already addressed: **Git auth via GitHub App OAuth2** (was item "PAT→OIDC for git";
-> resolved by the OAuth2 migration). Remaining secrets work is the CI→Snowflake leg (#2).
+> ✅ The pipeline is now **fully secretless**: Git auth = OAuth2, CI auth = OIDC.
+> No PATs, no rotation, no stored secrets. See `docs/oidc-setup.md` for the full setup.
 
 ---
 

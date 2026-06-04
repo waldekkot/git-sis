@@ -5,6 +5,21 @@
 #   - snow streamlit deploy (CLI and CI/CD):
 #       snow streamlit deploy -c <conn> -p app/ --replace
 #
+# Environment overrides (Snowflake CLI definition_version: 2 ctx.env syntax):
+#   GIT_SIS_DATABASE  — target database     (default: SNOWFLAKE_LEARNING_DB)
+#   GIT_SIS_SCHEMA    — target schema       (default: GIT_SIS)
+#   GIT_SIS_APP_NAME  — Streamlit object name (default: INGEST_CONSOLE)
+#   GIT_SIS_WAREHOUSE — query warehouse     (default: COMPUTE_WH)
+#
+# Multi-env examples:
+#   make deploy                                    # → SNOWFLAKE_LEARNING_DB.GIT_SIS.INGEST_CONSOLE
+#   make deploy ENV=prod                           # → uses Makefile GIT_SIS_DATABASE/SCHEMA vars
+#   GIT_SIS_SCHEMA=GIT_SIS_PR_42 make deploy       # → preview schema for PR #42
+#
+# PR preview:
+#   The preview.yml workflow sets GIT_SIS_SCHEMA=GIT_SIS_PR_<n> and
+#   GIT_SIS_APP_NAME=INGEST_CONSOLE_PR_<n> to deploy an isolated preview per PR.
+#
 # Deploy flow: snow CLI uploads app/ files to GIT_SIS.STREAMLIT stage, then
 # creates/replaces the STREAMLIT object with container runtime settings.
 #
@@ -16,11 +31,11 @@ entities:
   ingest_console:
     type: streamlit
     identifier:
-      name: INGEST_CONSOLE
-      schema: GIT_SIS
-      database: SNOWFLAKE_LEARNING_DB
+      name: <% ctx.env.GIT_SIS_APP_NAME | default('INGEST_CONSOLE') %>
+      schema: <% ctx.env.GIT_SIS_SCHEMA | default('GIT_SIS') %>
+      database: <% ctx.env.GIT_SIS_DATABASE | default('SNOWFLAKE_LEARNING_DB') %>
     title: "Ingestion Ops Console"
-    query_warehouse: COMPUTE_WH
+    query_warehouse: <% ctx.env.GIT_SIS_WAREHOUSE | default('COMPUTE_WH') %>
     compute_pool: SYSTEM_COMPUTE_POOL_CPU
     runtime_name: SYSTEM$ST_CONTAINER_RUNTIME_PY3_11
     main_file: streamlit_app.py

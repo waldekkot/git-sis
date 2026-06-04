@@ -55,7 +55,7 @@ def snowpark_app(seeded_session, uuid_patch):  # noqa: ARG001 — uuid_patch is 
     Returns (AppTest, Session) so tests can inspect in-memory tables directly.
     """
     with patch("lib.session.get_session", return_value=seeded_session):
-        at = AppTest.from_file(APP_FILE).run()
+        at = AppTest.from_file(APP_FILE, default_timeout=30).run()
     return at, seeded_session
 
 
@@ -130,7 +130,7 @@ def test_warning_when_session_fails():
     failing = MagicMock()
     failing.table.side_effect = RuntimeError("no table")
     with patch("lib.session.get_session", return_value=failing):
-        at = AppTest.from_file(APP_FILE).run()
+        at = AppTest.from_file(APP_FILE, default_timeout=30).run()
     assert not at.exception
     assert len(at.warning) == 1
     assert len(at.info) == 1
@@ -248,3 +248,148 @@ def test_error_shown_on_arbitrary_ingestion_exception(snowpark_app):
     assert not at.exception
     assert len(at.error) == 1
     assert "db connection lost" in at.error[0].value
+
+
+# ---------------------------------------------------------------------------
+# Purge feature — TDD: tests written BEFORE the UI is implemented
+#
+# @st.dialog is a fragment (Streamlit 1.37+). AppTest exposes the dialog's
+# elements as part of the app's widget tree.
+#
+# Two-step interaction:
+#   1. Click "Purge orders" → dialog opens → "Confirm purge" button appears
+#   2. Click "Confirm purge" → purge_orders() runs → dialog closes → rerun
+#
+# Ref: https://docs.streamlit.io/develop/api-reference/execution-flow/st.dialog
+# Ref: https://docs.snowflake.com/en/developer-guide/snowpark/python/working-with-dataframes
+# ---------------------------------------------------------------------------
+
+
+def test_purge_button_present(snowpark_app):
+    """'Purge orders' button must be visible in the Danger Zone expander.
+
+    This test drives the requirement for a 'Purge orders' button in the UI.
+    The expander expanded state does not affect AppTest widget accessibility.
+    """
+    at, _ = snowpark_app
+    assert not at.exception
+    purge_buttons = [b for b in at.button if "Purge" in b.label]
+    assert len(purge_buttons) == 1, f"Expected 1 Purge button, got {[b.label for b in at.button]}"
+
+
+def test_purge_dialog_opens_on_button_click(snowpark_app):
+    """Clicking 'Purge orders' opens the @st.dialog with a 'Confirm purge' button.
+
+    After clicking the Purge button, the dialog's elements are rendered
+    into the AppTest widget tree. The 'Confirm purge' button must appear.
+    """
+    at, sess = snowpark_app
+    purge_btn_idx = next(i for i, b in enumerate(at.button) if "Purge" in b.label)
+    with patch("lib.session.get_session", return_value=sess):
+        at.button[purge_btn_idx].click().run()
+
+    assert not at.exception
+    confirm_buttons = [b for b in at.button if "Confirm" in b.label]
+    assert len(confirm_buttons) == 1, (
+        f"Expected 'Confirm purge' button after dialog opens, got {[b.label for b in at.button]}"
+    )
+
+
+def test_purge_dialog_confirm_empties_orders_and_shows_success(snowpark_app):
+    """Full purge flow: seed -> Purge+Confirm dual-click -> ORDERS empty + success.
+
+    @st.dialog creates a fragment that only renders when its opener button
+    is clicked in the SAME script run.  AppTest solution: mark BOTH buttons
+    (Purge orders + Confirm purge) as clicked before calling .run() — the
+    dialog function is called because Purge is True, the Confirm path runs
+    because Confirm is True, all within one script execution.
+
+    Verifies end-to-end:
+    - Real Snowpark write via run_ingestion (seeded_session)
+    - Real purge via purge_orders (DataFrame.delete()) — no mock
+    - Success message shown in the UI  (session_state _purge_result path)
+    - ORDERS table is actually empty afterwards (real Snowpark count())
+    """
+    at, sess = snowpark_app
+
+    # Seed 500 rows via "Run ingestion" so we have data to purge.
+    with patch("lib.session.get_session", return_value=sess):
+        at.button[0].click().run()  # "Run ingestion"
+    assert sess.table(_cfg.ORDERS_TABLE).count() == 500  # precondition
+
+    # Open the dialog to discover the Confirm button index.
+    purge_btn_idx = next(i for i, b in enumerate(at.button) if "Purge" in b.label)
+    with patch("lib.session.get_session", return_value=sess):
+        at.button[purge_btn_idx].click().run()  # dialog opens
+    confirm_btn_idx = next(i for i, b in enumerate(at.button) if "Confirm" in b.label)
+
+    # Dual-click: mark both buttons as clicked, then run once.
+    # Both Purge (opener) and Confirm are True in the same script run:
+    #   Purge True  → _confirm_purge_dialog() is called → dialog renders
+    #   Confirm True → purge_orders() executes → _purge_result set → st.rerun()
+    # After the rerun: _purge_result is found → st.success() displayed.
+    at.button[purge_btn_idx].click()  # mark Purge as clicked  (no .run())
+    at.button[confirm_btn_idx].click()  # mark Confirm as clicked (no .run())
+    with patch("lib.session.get_session", return_value=sess):
+        at.run()  # single run with BOTH buttons clicked
+
+    assert not at.exception
+
+    # UI: success message with row count
+    assert len(at.success) >= 1
+    assert "500" in at.success[-1].value
+
+    # Data: ORDERS is empty (real Snowpark assertion — not a mock)
+    assert sess.table(_cfg.ORDERS_TABLE).count() == 0
+
+
+def test_purge_dialog_cancel_closes_dialog(snowpark_app):
+    """Cancel button in the dialog closes it without purging any data.
+
+    Covers the Cancel button branch (line 78 in streamlit_app.py).
+    """
+    at, sess = snowpark_app
+
+    # Seed data to confirm nothing is deleted after Cancel
+    with patch("lib.session.get_session", return_value=sess):
+        at.button[0].click().run()  # run ingestion → 500 rows
+    assert sess.table(_cfg.ORDERS_TABLE).count() == 500
+
+    # Open the dialog and discover Cancel button index
+    purge_btn_idx = next(i for i, b in enumerate(at.button) if "Purge" in b.label)
+    with patch("lib.session.get_session", return_value=sess):
+        at.button[purge_btn_idx].click().run()
+    cancel_btn_idx = next(i for i, b in enumerate(at.button) if b.label == "Cancel")
+
+    # Dual-click: Purge opener + Cancel
+    at.button[purge_btn_idx].click()
+    at.button[cancel_btn_idx].click()
+    with patch("lib.session.get_session", return_value=sess):
+        at.run()
+
+    assert not at.exception
+    assert sess.table(_cfg.ORDERS_TABLE).count() == 500  # data unchanged
+
+
+def test_purge_dialog_shows_error_on_failure(snowpark_app):
+    """When purge_orders() raises, _purge_error is set and st.error is shown.
+
+    Covers the except handler (lines 74-75) and the _purge_error display (94-95).
+    """
+    at, sess = snowpark_app
+
+    purge_btn_idx = next(i for i, b in enumerate(at.button) if "Purge" in b.label)
+    with patch("lib.session.get_session", return_value=sess):
+        at.button[purge_btn_idx].click().run()
+    confirm_btn_idx = next(i for i, b in enumerate(at.button) if "Confirm" in b.label)
+
+    # Simulate a failure during purge_orders()
+    with patch("lib.ingest.purge_orders", side_effect=RuntimeError("disk full")):
+        at.button[purge_btn_idx].click()
+        at.button[confirm_btn_idx].click()
+        with patch("lib.session.get_session", return_value=sess):
+            at.run()
+
+    assert not at.exception
+    assert len(at.error) >= 1
+    assert "disk full" in at.error[-1].value

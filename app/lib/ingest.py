@@ -19,6 +19,7 @@ Local-testing compatibility (https://docs.snowflake.com/en/developer-guide/snowp
 from __future__ import annotations
 
 import datetime
+import uuid as _uuid
 
 from snowflake.snowpark import Session
 from snowflake.snowpark.functions import (
@@ -47,6 +48,7 @@ from snowflake.snowpark.types import (
 from lib import config as _cfg  # module reference so test reloads propagate
 
 PROC_NAME = "LOAD_SYNTHETIC_ORDERS"
+PURGE_PROC_NAME = "PURGE_ORDERS"
 
 # Schema for INGEST_LOG -- used when appending new log rows via DataFrame API.
 _LOG_SCHEMA = StructType(
@@ -189,3 +191,36 @@ def get_kpis(session: Session) -> dict:
         "success_runs": success,
         "rows_loaded": rows_loaded,
     }
+
+
+def purge_orders(session: Session) -> int:
+    """Delete all rows from ORDERS and log a PURGE_ORDERS event to INGEST_LOG.
+
+    Uses DataFrame.delete() — the Snowpark API for row deletion. This is
+    compatible with the local testing emulator (no session.sql() used).
+
+    Ref: https://docs.snowflake.com/en/developer-guide/snowpark/python/working-with-dataframes
+
+    Args:
+        session: Snowpark session (local-built or SiS active session).
+
+    Returns:
+        Number of rows deleted from ORDERS.
+    """
+    # Count first so we can report it even after deletion.
+    # count() is a Snowpark action that works in the local testing emulator.
+    rows_to_delete = session.table(_cfg.ORDERS_TABLE).count()
+
+    # Delete all rows using the DataFrame API.
+    # DataFrame.delete() translates to DELETE FROM <table> with no WHERE clause.
+    session.table(_cfg.ORDERS_TABLE).delete()
+
+    # Record the purge event in INGEST_LOG for auditability.
+    run_id = str(_uuid.uuid4())
+    now = datetime.datetime.now(datetime.UTC)
+    session.create_dataframe(
+        [[run_id, PURGE_PROC_NAME, "SUCCESS", rows_to_delete, None, None, now, now]],
+        schema=_LOG_SCHEMA,
+    ).write.mode("append").save_as_table(_cfg.INGEST_LOG_TABLE)
+
+    return rows_to_delete

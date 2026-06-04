@@ -20,7 +20,14 @@ import uuid
 
 import pandas as pd
 import pytest
-from lib.ingest import PROC_NAME, _synthetic_orders, get_kpis, get_run_history, run_ingestion
+from lib.ingest import (
+    PROC_NAME,
+    _synthetic_orders,
+    get_kpis,
+    get_run_history,
+    purge_orders,
+    run_ingestion,
+)
 from snowflake.snowpark.functions import col, lit
 
 from lib import config as _cfg
@@ -186,3 +193,51 @@ def test_get_kpis_counts_both_statuses(seeded_session, uuid_patch):  # noqa: ARG
     assert kpis["success_runs"] == 1
     assert kpis["failed_runs"] == 1
     assert kpis["rows_loaded"] == 10
+
+
+# ---------------------------------------------------------------------------
+# purge_orders — TDD: tests written BEFORE implementation
+# ---------------------------------------------------------------------------
+
+
+def test_purge_orders_empties_orders_table(seeded_session, uuid_patch):  # noqa: ARG001
+    """After purge, ORDERS table must be empty."""
+    run_ingestion(seeded_session, str(uuid.uuid4()), num_rows=5)
+    assert seeded_session.table(_cfg.ORDERS_TABLE).count() == 5  # precondition
+
+    purge_orders(seeded_session)
+
+    assert seeded_session.table(_cfg.ORDERS_TABLE).count() == 0
+
+
+def test_purge_orders_returns_deleted_count(seeded_session, uuid_patch):  # noqa: ARG001
+    """purge_orders() must return the number of rows that were deleted."""
+    run_ingestion(seeded_session, str(uuid.uuid4()), num_rows=7)
+
+    deleted = purge_orders(seeded_session)
+
+    assert deleted == 7
+
+
+def test_purge_orders_logs_purge_event_to_ingest_log(seeded_session, uuid_patch):  # noqa: ARG001
+    """purge_orders() must log a PURGE_ORDERS event to INGEST_LOG."""
+    run_ingestion(seeded_session, str(uuid.uuid4()), num_rows=3)
+
+    purge_orders(seeded_session)
+
+    log = seeded_session.table(_cfg.INGEST_LOG_TABLE).collect()
+    purge_entries = [r for r in log if r["PROC_NAME"] == "PURGE_ORDERS"]
+    assert len(purge_entries) == 1
+    assert purge_entries[0]["STATUS"] == "SUCCESS"
+    assert purge_entries[0]["ROWS_LOADED"] == 3  # rows that were deleted
+
+
+def test_purge_orders_on_empty_table_returns_zero(seeded_session):
+    """Purging an already-empty ORDERS table returns 0 and does not raise."""
+    deleted = purge_orders(seeded_session)
+
+    assert deleted == 0
+    # Log entry for PURGE_ORDERS still written even when nothing was deleted
+    log = seeded_session.table(_cfg.INGEST_LOG_TABLE).collect()
+    purge_entries = [r for r in log if r["PROC_NAME"] == "PURGE_ORDERS"]
+    assert len(purge_entries) == 1

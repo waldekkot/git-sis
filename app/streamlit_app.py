@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 
 import streamlit as st
-from lib.ingest import get_kpis, get_run_history, run_ingestion
+from lib.ingest import get_kpis, get_run_history, purge_orders, run_ingestion
 from lib.session import get_session
 
 st.set_page_config(page_title="Ingestion Ops Console", page_icon="❄️", layout="wide")
@@ -52,3 +52,44 @@ try:
 except Exception as exc:  # noqa: BLE001
     st.warning(f"Could not load run history yet: {exc}")
     st.info("If this is the first run, ensure deploy/00_setup_env.sql has created the tables.")
+
+# --- Danger Zone -------------------------------------------------------------
+
+
+@st.dialog("Confirm purge", icon="⚠️")
+def _confirm_purge_dialog() -> None:
+    """Modal confirmation before irreversible ORDERS deletion.
+
+    @st.dialog is a fragment: only this function reruns on widget interaction,
+    not the whole page.  Ref: https://docs.streamlit.io/develop/api-reference/execution-flow/st.dialog
+    """
+    st.warning("This will permanently delete **all rows** from the ORDERS table.")
+    st.caption("This action cannot be undone. The deletion will be logged to INGEST_LOG.")
+    col1, col2 = st.columns(2)
+    if col1.button("Confirm purge", type="primary", use_container_width=True):
+        try:
+            with st.spinner("Purging ORDERS..."):
+                rows_deleted = purge_orders(session)
+            st.session_state["_purge_result"] = rows_deleted
+        except Exception as exc:  # noqa: BLE001
+            st.session_state["_purge_error"] = str(exc)
+        st.rerun()
+    if col2.button("Cancel", use_container_width=True):
+        st.rerun()
+
+
+with st.expander("⚠️ Danger Zone", expanded=False):
+    st.caption("Irreversible operations — use with care.")
+    if st.button("🗑 Purge orders", type="secondary", help="Delete all rows from the ORDERS table"):
+        _confirm_purge_dialog()
+
+# Surface purge result / error after the dialog closes and the app reruns.
+# No st.rerun() here — KPIs are already refreshed by the dialog's own rerun.
+# The message persists until the next user interaction (intentional: informs the operator).
+if "_purge_result" in st.session_state:
+    rows = st.session_state.pop("_purge_result")
+    st.success(f"ORDERS purged — {rows:,} rows deleted.")
+
+if "_purge_error" in st.session_state:
+    err = st.session_state.pop("_purge_error")
+    st.error(f"Purge failed: {err}")

@@ -65,8 +65,8 @@
 
 <main>
   <div class="hero">
-    <h1>Pre-commit Hooks &amp; <span class="highlight">GitHub Actions</span></h1>
-    <p class="page-subtitle">Lock quality gates on every commit. Auto-deploy to SiS on every push to main — zero manual steps after the first setup.</p>
+    <h1>Pre-commit Hooks &amp; <span class="highlight">Secretless CI/CD</span></h1>
+    <p class="page-subtitle">Lock quality gates on every commit. OIDC auth means zero stored secrets — GitHub Actions deploys to SiS with short-lived tokens that expire in minutes.</p>
   </div>
 
   <!-- CI pipeline SVG -->
@@ -89,7 +89,7 @@
       <text x="195" y="65" text-anchor="middle" fill="#8B949E" font-size="9">unit-tests</text>
       <text x="195" y="82" text-anchor="middle" fill="#E6EDF3" font-size="11" font-weight="600">ruff check</text>
       <text x="195" y="97" text-anchor="middle" fill="#E6EDF3" font-size="11" font-weight="600">pytest unit</text>
-      <text x="195" y="115" text-anchor="middle" fill="#8B949E" font-size="8">all pushes + PRs · ~15s</text>
+      <text x="195" y="115" text-anchor="middle" fill="#8B949E" font-size="8">all pushes + PRs · no creds · ~15s</text>
 
       <!-- check mark for job-1 -->
       <g class="check-1">
@@ -105,8 +105,8 @@
       <rect class="job-2" x="298" y="42" width="158" height="90" rx="8" stroke="#30363D" stroke-width="1.5"/>
       <text x="377" y="65" text-anchor="middle" fill="#8B949E" font-size="9">integration-tests</text>
       <text x="377" y="82" text-anchor="middle" fill="#E6EDF3" font-size="11" font-weight="600">pytest integration</text>
-      <text x="377" y="97" text-anchor="middle" fill="#E6EDF3" font-size="10">real Snowflake · temp schema</text>
-      <text x="377" y="115" text-anchor="middle" fill="#8B949E" font-size="8">main only · ~12s</text>
+      <text x="377" y="97" text-anchor="middle" fill="#E6EDF3" font-size="10">real Snowflake · OIDC auth</text>
+      <text x="377" y="115" text-anchor="middle" fill="#D29922" font-size="8">env:ci · main only · ~12s</text>
 
       <!-- check mark for job-2 -->
       <g class="check-2">
@@ -123,7 +123,7 @@
       <text x="565" y="65" text-anchor="middle" fill="#8B949E" font-size="9">deploy-to-sis</text>
       <text x="565" y="82" text-anchor="middle" fill="#E6EDF3" font-size="11" font-weight="600">snow streamlit</text>
       <text x="565" y="97" text-anchor="middle" fill="#E6EDF3" font-size="11" font-weight="600">deploy</text>
-      <text x="565" y="115" text-anchor="middle" fill="#8B949E" font-size="8">main only · ~30s</text>
+      <text x="565" y="115" text-anchor="middle" fill="#D29922" font-size="8">env:prod · approval gate · ~30s</text>
 
       <!-- check mark for job-3 -->
       <g class="check-3">
@@ -248,7 +248,66 @@
     </ol>
   </div>
 
-  <h2 class="reveal">Part B — GitHub Actions CI/CD</h2>
+  <h2 class="reveal">Part B — GitHub Actions CI/CD (OIDC — zero secrets)</h2>
+
+  <div class="reveal">
+    <p>
+      The pipeline uses <strong>Workload Identity Federation (OIDC)</strong> instead of
+      stored secrets. GitHub mints a short-lived JWT; Snowflake validates it against
+      the registered subject claim. No PATs, no rotation, no expiry anxiety.
+    </p>
+    <div class="note">
+      <span class="note-icon">💡</span>
+      <div>
+        <strong>How OIDC works in this pipeline:</strong><br>
+        1. GitHub Actions requests a JWT from its built-in OIDC provider<br>
+        2. The <code>snowflakedb/snowflake-cli-action</code> passes this token to Snowflake<br>
+        3. Snowflake verifies the token’s <code>sub</code> claim matches the SERVICE user’s
+           <code>WORKLOAD_IDENTITY_PROVIDER</code> + authorized subject<br>
+        4. A session is granted — no password or key ever leaves GitHub
+      </div>
+    </div>
+
+    <h3>GitHub Environments</h3>
+    <p>
+      Three environments control OIDC subject scoping and approval gates:
+    </p>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin:1rem 0">
+      <thead>
+        <tr style="border-bottom:1px solid #30363D">
+          <th style="text-align:left;padding:.4rem .6rem;color:#8B949E">Environment</th>
+          <th style="text-align:left;padding:.4rem .6rem;color:#8B949E">SERVICE user</th>
+          <th style="text-align:left;padding:.4rem .6rem;color:#8B949E">OIDC subject</th>
+          <th style="text-align:left;padding:.4rem .6rem;color:#8B949E">Protection</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid #21262D">
+          <td style="padding:.4rem .6rem;font-family:monospace;color:#3FB950">ci</td>
+          <td style="padding:.4rem .6rem;font-family:monospace;color:#E6EDF3">CI_SVC_CI</td>
+          <td style="padding:.4rem .6rem;font-family:monospace;color:#8B949E;font-size:11px">repo:waldekkot/git-sis:environment:ci</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">none (auto-approve)</td>
+        </tr>
+        <tr style="border-bottom:1px solid #21262D">
+          <td style="padding:.4rem .6rem;font-family:monospace;color:#D29922">preview</td>
+          <td style="padding:.4rem .6rem;font-family:monospace;color:#E6EDF3">CI_SVC_PREVIEW</td>
+          <td style="padding:.4rem .6rem;font-family:monospace;color:#8B949E;font-size:11px">repo:waldekkot/git-sis:environment:preview</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">none (PR ephemeral)</td>
+        </tr>
+        <tr>
+          <td style="padding:.4rem .6rem;font-family:monospace;color:#FF7B72">prod</td>
+          <td style="padding:.4rem .6rem;font-family:monospace;color:#E6EDF3">CI_SVC_PROD</td>
+          <td style="padding:.4rem .6rem;font-family:monospace;color:#8B949E;font-size:11px">repo:waldekkot/git-sis:environment:prod</td>
+          <td style="padding:.4rem .6rem;color:#FF7B72;font-weight:600">Required reviewer</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      The <code>prod</code> environment has a <strong>required reviewer</strong> gate: the pipeline
+      pauses at <code>deploy-to-sis</code> until a maintainer approves. This prevents
+      untested code from reaching users even if tests pass (defense-in-depth).
+    </p>
+  </div>
 
   <div class="reveal">
     <p>
@@ -259,58 +318,44 @@
         <tr style="border-bottom:1px solid #30363D">
           <th style="text-align:left;padding:.4rem .6rem;color:#8B949E">Job</th>
           <th style="text-align:left;padding:.4rem .6rem;color:#8B949E">When</th>
+          <th style="text-align:left;padding:.4rem .6rem;color:#8B949E">Auth</th>
           <th style="text-align:left;padding:.4rem .6rem;color:#8B949E">What it validates</th>
         </tr>
       </thead>
       <tbody>
         <tr style="border-bottom:1px solid #21262D">
           <td style="padding:.4rem .6rem;font-family:monospace;color:#E6EDF3">unit-tests</td>
-          <td style="padding:.4rem .6rem;color:#8B949E">Every push + every PR</td>
-          <td style="padding:.4rem .6rem;color:#8B949E">DataFrame logic against the Snowpark emulator + ruff lint. No credentials needed.</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Every push + PR</td>
+          <td style="padding:.4rem .6rem;color:#3FB950">None</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Snowpark emulator + ruff + import-linter</td>
         </tr>
         <tr style="border-bottom:1px solid #21262D">
           <td style="padding:.4rem .6rem;font-family:monospace;color:#E6EDF3">integration-tests</td>
-          <td style="padding:.4rem .6rem;color:#8B949E">Push to main only</td>
-          <td style="padding:.4rem .6rem;color:#8B949E">Same logic against the real Snowflake engine. Creates and drops a disposable <code>GIT_SIS_TEST_&lt;uuid&gt;</code> schema — never touches production data.</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Push to main</td>
+          <td style="padding:.4rem .6rem;color:#D29922">OIDC (env:ci)</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Real Snowflake, disposable <code>GIT_SIS_TEST_&lt;uuid&gt;</code> schema</td>
         </tr>
         <tr>
           <td style="padding:.4rem .6rem;font-family:monospace;color:#E6EDF3">deploy-to-sis</td>
-          <td style="padding:.4rem .6rem;color:#8B949E">Push to main only</td>
-          <td style="padding:.4rem .6rem;color:#8B949E">Deploys the app only after both test layers pass. Uses <code>scripts/30_deploy.sh</code> → <code>snow streamlit deploy</code>.</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Push to main</td>
+          <td style="padding:.4rem .6rem;color:#FF7B72">OIDC (env:prod)</td>
+          <td style="padding:.4rem .6rem;color:#8B949E">Deploys app + requires manual approval</td>
         </tr>
       </tbody>
     </table>
     <div class="note">
       <span class="note-icon">💡</span>
       <div>
-        <strong>Why integration tests only on main?</strong> PRs (especially from forks) don't
-        have access to the <code>SF_PAT_TOKEN</code> GitHub Secret, and running real Snowflake
-        compute on every PR adds cost and latency. Unit tests give fast feedback on PRs;
-        integration tests are the final gate before production deploy.
+        <strong>Why unit tests run without credentials:</strong> The Snowpark local-testing
+        emulator (<code>local_testing=True</code>) creates an in-memory DataFrame engine.
+        No network, no Snowflake account needed. This means PRs from forks can still
+        run the full unit test suite safely.
       </div>
     </div>
   </div>
 
   <div class="reveal">
-    <h3>Add the required GitHub Secret</h3>
-    <ol class="steps">
-      <li>Read your Snowflake Programmatic Access Token value from the local token file</li>
-      <li>Go to your GitHub repo → <strong>Settings → Secrets and variables → Actions</strong></li>
-      <li>Click <strong>New repository secret</strong></li>
-      <li>Name: <code>SF_PAT_TOKEN</code>, Value: the raw token string</li>
-    </ol>
-
-    <div class="warn">
-      <span class="note-icon">⚠️</span>
-      <div>
-        <strong>Note on token expiry:</strong> Snowflake PAT tokens may have an expiration date.
-        If the deploy job starts failing with auth errors, regenerate the token and update the GitHub Secret.
-      </div>
-    </div>
-  </div>
-
-  <div class="reveal">
-    <h3>The CI workflow</h3>
+    <h3>The CI workflow (OIDC)</h3>
     <div class="code-block">
       <div class="code-block-header"><span>.github/workflows/ci.yml</span><button class="copy-btn">Copy</button></div>
       <pre>name: CI
@@ -320,78 +365,121 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  id-token: write   # ← required for OIDC token request
+  contents: read
+
 jobs:
   unit-tests:
     name: Unit tests + lint (no Snowflake)
-    # Runs on every push and every PR — no credentials required.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
-        with: { version: "latest", enable-cache: true, cache-dependency-glob: "uv.lock" }
+        with: { version: "latest", enable-cache: true }
       - run: uv sync
-      - run: uv run pytest tests/unit/ -v --tb=short
       - run: uv run ruff check app/
+      - run: uv run pytest tests/unit/ -v --tb=short
+      - run: cd app && uv run --project .. lint-imports
 
   integration-tests:
-    name: Integration tests (real Snowflake)
-    # Runs after unit tests pass, on push to main only.
-    # Creates and drops a disposable GIT_SIS_TEST_<uuid> schema.
+    name: Integration tests (OIDC → real Snowflake)
     runs-on: ubuntu-latest
     needs: unit-tests
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: ci                     # ← scopes OIDC subject
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
-        with: { version: "latest", enable-cache: true, cache-dependency-glob: "uv.lock" }
+        with: { version: "latest", enable-cache: true }
+      - uses: snowflakedb/snowflake-cli-action@v2
+        with:
+          cli-version: "latest"
+          default-config-file-path: __skip__
+          use-oidc: true
+          oidc-token-name: SNOWFLAKE_CONNECTIONS_CI_TOKEN
+      - uses: ./.github/actions/setup-snowflake
+        with:
+          sf-account: ${{ vars.SF_ACCOUNT }}
+          sf-user: ${{ vars.SF_USER_CI }}
+          connection-name: ci
       - run: uv sync
-      - name: Configure Snowflake CI connection
-        run: |
-          echo "$SF_PAT_TOKEN" > /tmp/sf_token.txt
-          mkdir -p ~/.snowflake
-          printf '[connections.ci]\naccount = "sfseeurope-wkot_demo1"\n\
-user = "wkot"\nauthenticator = "PROGRAMMATIC_ACCESS_TOKEN"\n\
-token_file_path = "/tmp/sf_token.txt"\n' > ~/.snowflake/config.toml
-          chmod 0600 ~/.snowflake/config.toml
-        env: { SF_PAT_TOKEN: "${{ secrets.SF_PAT_TOKEN }}" }
-      - name: Run integration tests
-        # Each test gets its own GIT_SIS_TEST_<uuid> schema (function-scoped).
-        # -n 5: 5 workers run schemas in parallel, cutting ~60s → ~12s.
-        run: uv run pytest tests/integration/ -v --tb=short --no-cov -n 5
+      - run: uv run pytest tests/integration/ -v --tb=short -n 5
         env: { SNOWFLAKE_DEFAULT_CONNECTION_NAME: ci }
 
   deploy-to-sis:
-    name: Deploy to SiS (main only)
-    # Deploys only after BOTH unit and integration tests pass.
+    name: Deploy to SiS (prod approval gate)
     runs-on: ubuntu-latest
     needs: integration-tests
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: prod                   # ← requires reviewer approval
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-        with: { version: "latest", enable-cache: true, cache-dependency-glob: "uv.lock" }
-      - run: uv tool install snowflake-cli
-      - name: Configure Snowflake CI connection
+      - uses: snowflakedb/snowflake-cli-action@v2
+        with:
+          cli-version: "latest"
+          default-config-file-path: __skip__
+          use-oidc: true
+          oidc-token-name: SNOWFLAKE_CONNECTIONS_PROD_TOKEN
+      - uses: ./.github/actions/setup-snowflake
+        with:
+          sf-account: ${{ vars.SF_ACCOUNT }}
+          sf-user: ${{ vars.SF_USER_PROD }}
+          connection-name: prod
+      - run: scripts/30_deploy.sh -c prod</pre>
+    </div>
+  </div>
+
+  <div class="reveal">
+    <h3>The release workflow (tag → versioned deploy)</h3>
+    <p>
+      Pushing a <code>v*.*.*</code> tag triggers <code>.github/workflows/release.yml</code>,
+      which deploys + commits an immutable Streamlit version alias:
+    </p>
+    <div class="code-block">
+      <div class="code-block-header"><span>.github/workflows/release.yml (key steps)</span><button class="copy-btn">Copy</button></div>
+      <pre># Triggered by: git tag v1.2.3 && git push origin v1.2.3
+on:
+  push:
+    tags: ['v*.*.*']
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: prod
+    permissions: { id-token: write, contents: read }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: snowflakedb/snowflake-cli-action@v2
+        with: { cli-version: "latest", default-config-file-path: __skip__,
+                use-oidc: true, oidc-token-name: SNOWFLAKE_CONNECTIONS_PROD_TOKEN }
+      - uses: ./.github/actions/setup-snowflake
+        with: { sf-account: ${{ vars.SF_ACCOUNT }}, sf-user: ${{ vars.SF_USER_PROD }},
+                connection-name: prod }
+      - name: Deploy + commit version
         run: |
-          echo "$SF_PAT_TOKEN" > /tmp/sf_token.txt
-          mkdir -p ~/.snowflake
-          printf '[connections.ci]\naccount = "sfseeurope-wkot_demo1"\n\
-user = "wkot"\nauthenticator = "PROGRAMMATIC_ACCESS_TOKEN"\n\
-token_file_path = "/tmp/sf_token.txt"\n' > ~/.snowflake/config.toml
-          chmod 0600 ~/.snowflake/config.toml
-        env: { SF_PAT_TOKEN: "${{ secrets.SF_PAT_TOKEN }}" }
-      - name: Deploy to Snowflake SiS
-        run: scripts/30_deploy.sh -c ci</pre>
+          scripts/30_deploy.sh -c prod
+          # v1.2.3 → V1_2_3 (Snowflake identifier rules)
+          ALIAS=$(echo "${GITHUB_REF_NAME}" | tr '.-' '__' | tr '[:lower:]' '[:upper:]')
+          snow sql -c prod -q "ALTER STREAMLIT ... COMMIT VERSION $ALIAS"</pre>
+    </div>
+    <div class="note">
+      <span class="note-icon">💡</span>
+      <div>
+        <strong>Rollback from any version:</strong><br>
+        <code>ALTER STREAMLIT ... SET DEFAULT_VERSION = V1_1_0;</code><br>
+        Instant. No redeploy. See <code>docs/runbook.md</code> for the full procedure.
+      </div>
     </div>
   </div>
 
   <div class="tip reveal">
     <span class="note-icon">🚀</span>
     <div>
-      <strong>Full cycle completed!</strong> Your workflow is now:
-      <code>git commit</code> (pre-commit runs) →
-      <code>git push</code> (CI: tests pass + SiS redeploys) →
-      visit the app URL to see the live update.
+      <strong>Full secretless cycle:</strong>
+      <code>git commit</code> (pre-commit) →
+      <code>git push</code> (OIDC CI: unit → integration → <em>approval</em> → deploy) →
+      <code>git tag v1.0.0 && git push origin v1.0.0</code> (immutable version).
+      Zero secrets stored. Rollback in seconds.
     </div>
   </div>
 

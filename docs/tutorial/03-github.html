@@ -58,7 +58,7 @@
 <main>
   <div class="hero">
     <h1>Push to GitHub &amp; <span class="highlight">Wire Snowflake</span></h1>
-    <p class="page-subtitle">Create the GitHub repo, push your code, then let Snowflake clone it via a GIT REPOSITORY object — authenticated with a stored PAT secret.</p>
+    <p class="page-subtitle">Create the GitHub repo, push your code, then connect Snowflake via OAuth2 — one browser click, no secrets to manage.</p>
   </div>
 
   <!-- Clone sequence SVG -->
@@ -81,13 +81,13 @@
       <rect x="265" y="55" width="140" height="75" rx="10" fill="#161B22" stroke="#30363D" stroke-width="1.5"/>
       <text x="335" y="85" text-anchor="middle" font-size="22">🐙</text>
       <text x="335" y="105" text-anchor="middle" fill="#E6EDF3" font-size="11" font-weight="600">GitHub</text>
-      <text x="335" y="120" text-anchor="middle" fill="#8B949E" font-size="9">waldekkot/git-sis (private)</text>
+      <text x="335" y="120" text-anchor="middle" fill="#8B949E" font-size="9">waldekkot/git-sis (public)</text>
 
-      <!-- Lock icon (PAT auth) -->
+      <!-- Lock icon (OAuth2 auth) -->
       <g class="lock-icon">
-        <text x="480" y="80" text-anchor="middle" font-size="18">🔑</text>
-        <text x="480" y="98" text-anchor="middle" fill="#D29922" font-size="9">PAT SECRET</text>
-        <text x="480" y="110" text-anchor="middle" fill="#8B949E" font-size="8">GITHUB_PAT</text>
+        <text x="480" y="80" text-anchor="middle" font-size="18">🔓</text>
+        <text x="480" y="98" text-anchor="middle" fill="#3FB950" font-size="9">OAuth2</text>
+        <text x="480" y="110" text-anchor="middle" fill="#8B949E" font-size="8">GitHub App</text>
       </g>
 
       <!-- Solid line: FETCH clone (after wiring) -->
@@ -125,107 +125,77 @@
   <div class="reveal">
     <div class="code-block">
       <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
-      <pre># Create the private repo and push (gh CLI)
-gh repo create waldekkot/git-sis --private --source=. --remote=origin --push
+      <pre># Create the public repo and push (gh CLI)
+gh repo create waldekkot/git-sis --public --source=. --remote=origin --push
 
 # Or if repo already exists
 git remote add origin https://github.com/waldekkot/git-sis
 git push -u origin main</pre>
     </div>
-  </div>
-
-  <h2 class="reveal">2. Create a GitHub Personal Access Token</h2>
-
-  <div class="reveal">
-    <p>Snowflake needs a PAT to clone your private repo. Use a <strong>classic PAT with repo scope</strong> — fine-grained tokens have known issues with Snowflake's git_https_api provider.</p>
-    <ol class="steps">
-      <li>Go to <strong>GitHub → Settings → Developer Settings → Personal access tokens → Tokens (classic)</strong></li>
-      <li>Click <strong>Generate new token (classic)</strong></li>
-      <li>Select scope: <code>repo</code> (full control of private repos)</li>
-      <li>Copy the token — you won't see it again</li>
-    </ol>
-
-    <div class="warn">
-      <span class="note-icon">⚠️</span>
+    <div class="note">
+      <span class="note-icon">💡</span>
       <div>
-        <strong>Never paste your token in chat or commit it to git.</strong>
-        Store it only in the Snowflake SECRET created in the next step.
+        <strong>Why public?</strong> A public repo unlocks GitHub's
+        <em>environment protection rules</em> (required reviewers on prod deploy)
+        on all billing plans. It also makes the blueprint directly shareable with
+        customers and teammates — no access requests needed. There are no secrets
+        in the repo (all auth is OIDC/OAuth2-based).
       </div>
     </div>
   </div>
 
-  <h2 class="reveal">3. Store the PAT as a Snowflake SECRET</h2>
+  <h2 class="reveal">2. Connect Snowflake to GitHub (OAuth2 — one click)</h2>
 
   <div class="reveal">
     <p>
-      The PAT lives in <strong><code>GIT_SIS_INFRA.SECRETS.GITHUB_PAT</code></strong> — a separate
-      database from the demo schema. This means it <strong>survives <code>99_cleanup.sql</code></strong>
-      resets. You create it once and never need to re-enter it.
+      Snowflake authenticates to GitHub using the built-in <strong>Snowflake GitHub App</strong>.
+      No Personal Access Token, no client secret, no rotation — Snowflake manages
+      the OAuth2 tokens automatically. Each user authorizes once in their browser.
     </p>
 
-    <h3>First: create the infra database (one-time, idempotent)</h3>
-    <div class="code-block">
-      <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
-      <pre>snow sql -c oregon-sedemo -f deploy/01_setup_infra.sql
-# Expected: "Infra setup complete"</pre>
-    </div>
-
-    <h3>Then: create the secret (once ever)</h3>
-    <p>Run this from your local terminal — <strong>not</strong> in Snowsight (to ensure you're hitting the correct account):</p>
-    <div class="code-block">
-      <div class="code-block-header"><span>bash — run in your terminal</span><button class="copy-btn">Copy</button></div>
-      <pre>snow sql -c oregon-sedemo -q "
-CREATE OR REPLACE SECRET GIT_SIS_INFRA.SECRETS.GITHUB_PAT
-    TYPE = PASSWORD
-    USERNAME = 'waldekkot'
-    PASSWORD = '&lt;your-classic-github-pat&gt;';
-"</pre>
-    </div>
-
-    <p>Verify the <code>created_on</code> timestamp changed (proves the right account was updated):</p>
-    <div class="code-block">
-      <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
-      <pre>snow sql -c oregon-sedemo -q \
-  "SHOW SECRETS IN SCHEMA GIT_SIS_INFRA.SECRETS" \
-  | grep GITHUB_PAT</pre>
-    </div>
-
-    <div class="tip">
-      <span class="note-icon">✅</span>
+    <div class="note">
+      <span class="note-icon">💡</span>
       <div>
-        The <code>created_on</code> timestamp is your truth signal. If it didn't change,
-        your edit landed in the wrong account. Always use <code>snow sql -c &lt;connection&gt;</code>
-        to guarantee the right target.
+        <strong>Why OAuth2 instead of PAT?</strong><br>
+        • <strong>No secret storage:</strong> PATs must be stored in a Snowflake SECRET, rotated
+          before expiry, and shared across CI/manual flows. OAuth2 eliminates all of that.<br>
+        • <strong>Per-user identity:</strong> each developer authorizes individually. Audit logs
+          show who fetched, not a generic service account.<br>
+        • <strong>No expiry anxiety:</strong> the GitHub App handles token refresh transparently.
       </div>
     </div>
-  </div>
 
-  <h2 class="reveal">4. Create the API Integration and GIT REPOSITORY</h2>
+    <h3>Option A — via Snowsight (recommended)</h3>
+    <ol class="steps">
+      <li>Open <strong>Snowsight → Workspaces → New workspace</strong></li>
+      <li>In the <strong>Files</strong> tab, click <strong>Connect Git Repository</strong></li>
+      <li>Complete the GitHub OAuth authorization (one-click browser popup)</li>
+      <li>Select the repo <code>waldekkot/git-sis</code> and branch <code>main</code></li>
+    </ol>
+    <p>That's it. Subsequent <code>FETCH</code> operations work automatically.</p>
 
-  <div class="reveal">
-    <p>The bootstrap script handles both (requires ACCOUNTADMIN for the API integration):</p>
+    <h3>Option B — via shell runner</h3>
     <div class="code-block">
       <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
-      <pre># First-time only: creates API integration + git repo (then deploys)
-scripts/deploy.sh --bootstrap -c oregon-sedemo</pre>
+      <pre># Creates the API INTEGRATION + GIT REPOSITORY with OAuth2
+scripts/10_setup.sh --with-git -c oregon-sedemo</pre>
     </div>
-
-    <p>Or manually — see <code>deploy/10_git_and_streamlit.sql</code> sections 1 and 2:</p>
+    <p>
+      After running this, open any Workspace and authorize the GitHub App when prompted.
+      The script creates:
+    </p>
     <div class="code-block">
-      <div class="code-block-header"><span>SQL — create API integration (ACCOUNTADMIN)</span><button class="copy-btn">Copy</button></div>
-      <pre>USE ROLE ACCOUNTADMIN;
+      <div class="code-block-header"><span>SQL — what 10_setup.sh --with-git creates</span><button class="copy-btn">Copy</button></div>
+      <pre>-- API Integration (ACCOUNTADMIN)
 CREATE API INTEGRATION IF NOT EXISTS git_api_waldekkot
-    API_PROVIDER           = git_https_api
-    API_ALLOWED_PREFIXES   = ('https://github.com/waldekkot')
-    ALLOWED_AUTHENTICATION_SECRETS = (GIT_SIS_INFRA.SECRETS.GITHUB_PAT)
-    ENABLED                = TRUE;
-GRANT USAGE ON INTEGRATION git_api_waldekkot TO ROLE SYSADMIN;
+    API_PROVIDER = git_https_api
+    API_ALLOWED_PREFIXES = ('https://github.com/waldekkot')
+    ENABLED = TRUE;
 
-USE ROLE SYSADMIN;
+-- GIT REPOSITORY (SYSADMIN) — no GIT_CREDENTIALS needed for OAuth2
 CREATE GIT REPOSITORY IF NOT EXISTS SNOWFLAKE_LEARNING_DB.GIT_SIS.APP_REPO
-    API_INTEGRATION  = git_api_waldekkot
-    GIT_CREDENTIALS  = GIT_SIS_INFRA.SECRETS.GITHUB_PAT
-    ORIGIN           = 'https://github.com/waldekkot/git-sis';
+    API_INTEGRATION = git_api_waldekkot
+    ORIGIN = 'https://github.com/waldekkot/git-sis';
 
 -- Verify clone succeeded
 ALTER GIT REPOSITORY SNOWFLAKE_LEARNING_DB.GIT_SIS.APP_REPO FETCH;
@@ -235,8 +205,30 @@ SHOW GIT BRANCHES IN GIT REPOSITORY SNOWFLAKE_LEARNING_DB.GIT_SIS.APP_REPO;</pre
     <div class="note">
       <span class="note-icon">💡</span>
       <div>
-        Expected output from <code>SHOW GIT BRANCHES</code>: a row for <code>main</code> with the current commit SHA.
-        If you see "Operation 'clone' is not authorized", the PAT token is missing or has wrong scope.
+        <strong>No <code>GIT_CREDENTIALS</code> parameter:</strong> with OAuth2, the user's
+        browser-authorized token is used transparently. The <code>GIT_CREDENTIALS</code>
+        keyword is only needed for PAT-based auth (the legacy path).
+      </div>
+    </div>
+  </div>
+
+  <h2 class="reveal">3. Verify the git-sync</h2>
+
+  <div class="reveal">
+    <div class="code-block">
+      <div class="code-block-header"><span>bash — verify from CLI</span><button class="copy-btn">Copy</button></div>
+      <pre>snow sql -c oregon-sedemo -q "
+ALTER GIT REPOSITORY SNOWFLAKE_LEARNING_DB.GIT_SIS.APP_REPO FETCH;
+SHOW GIT BRANCHES IN GIT REPOSITORY SNOWFLAKE_LEARNING_DB.GIT_SIS.APP_REPO;"
+# Expected: a row for 'main' with the current commit SHA</pre>
+    </div>
+    <div class="tip">
+      <span class="note-icon">✅</span>
+      <div>
+        <strong>Git wiring is optional.</strong> The primary deploy path (<code>snow streamlit deploy</code>)
+        doesn't need a GIT REPOSITORY at all — it uploads files directly.
+        The git wiring enables <strong>Workspace git-sync</strong> (push/pull from Snowsight)
+        and <strong><code>make deploy-git</code></strong> (pull-based refresh).
       </div>
     </div>
   </div>

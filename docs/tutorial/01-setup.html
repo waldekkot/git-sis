@@ -99,13 +99,31 @@
     <div class="card">
       <div class="card-icon">🐙</div>
       <h4>GitHub account</h4>
-      <p>Private repo + a classic Personal Access Token (repo scope).</p>
+      <p>Public repo. No PAT needed — Snowflake uses OAuth2 for git; CI uses OIDC.</p>
     </div>
   </div>
 
   <h2 class="reveal">Install the toolchain</h2>
 
   <div class="reveal">
+    <div class="note">
+      <span class="note-icon">💡</span>
+      <div>
+        <strong>Why uv?</strong> uv resolves + installs the full dependency tree in ~1s
+        (vs ~30s for pip). It also pins Python 3.11 via <code>.python-version</code> so every
+        dev gets the same interpreter without pyenv/asdf. The lockfile (<code>uv.lock</code>)
+        guarantees reproducible builds in CI and on colleagues' machines.
+      </div>
+    </div>
+    <div class="note" style="margin-top:12px">
+      <span class="note-icon">💡</span>
+      <div>
+        <strong>Why container runtime?</strong> The SiS container runtime gives you a full
+        Python environment with pip-installable packages (via <code>pyproject.toml</code>).
+        Warehouse runtime is limited to a fixed Anaconda channel. Container runtime also
+        supports custom system dependencies if you ever need them.
+      </div>
+    </div>
     <div class="code-block">
       <div class="code-block-header"><span>bash</span><button class="copy-btn">Copy</button></div>
       <pre># Install uv (macOS / Linux)

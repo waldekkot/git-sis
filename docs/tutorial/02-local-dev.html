@@ -390,6 +390,73 @@ INGEST_LOG_TABLE = f"{SCHEMA_FQN}.INGEST_LOG"</pre>
     </div>
   </div>
 
+  <h2 class="reveal">Architecture guardrail (import-linter)</h2>
+
+  <div class="reveal">
+    <p>
+      The <code>app/.importlinter</code> config enforces a hard boundary: business logic
+      modules (<code>lib.ingest</code>, <code>lib.config</code>) <strong>cannot import
+      <code>streamlit</code></strong>. This keeps them testable with the Snowpark emulator
+      alone (no browser, no UI context).
+    </p>
+    <div class="code-block">
+      <div class="code-block-header"><span>app/.importlinter</span><button class="copy-btn">Copy</button></div>
+      <pre>[importlinter]
+root_package = lib
+include_external_packages = True
+
+[importlinter:contract:logic-free-of-streamlit]
+name = Business logic must not import Streamlit
+type = forbidden
+source_modules = lib.ingest
+                 lib.config
+forbidden_modules = streamlit</pre>
+    </div>
+    <div class="code-block">
+      <div class="code-block-header"><span>bash — run the guardrail</span><button class="copy-btn">Copy</button></div>
+      <pre>cd app && uv run --project .. lint-imports
+# ✅ Contracts: 1 kept, 0 broken</pre>
+    </div>
+    <div class="note">
+      <span class="note-icon">💡</span>
+      <div>
+        <strong>Why?</strong> If <code>lib/ingest.py</code> accidentally <code>import streamlit</code>,
+        unit tests still pass (streamlit is installed) but the architecture contract breaks.
+        This catches dependency creep <em>before</em> it makes testing slow or impossible.
+        CI runs this check in the <code>unit-tests</code> job.
+      </div>
+    </div>
+  </div>
+
+  <h2 class="reveal">Emulator gaps (known limitations)</h2>
+
+  <div class="reveal">
+    <p>
+      The Snowpark local-testing emulator doesn't support everything. Known gaps
+      that affect this project are documented in <code>docs/emulator-gaps.md</code>:
+    </p>
+    <ul style="font-size:13px;color:#8B949E;margin:.6rem 0">
+      <li><code>uniform()</code> — use <code>random()</code> instead in tests</li>
+      <li><code>round(col, scale)</code> — emulator ignores the scale argument</li>
+      <li><code>UUID_STRING()</code> — returns empty string; mock with <code>lit()</code></li>
+      <li><code>session.sql("...")</code> — not supported; use DataFrame API instead</li>
+    </ul>
+    <p>
+      When you hit one of these, add a <code>@pytest.mark.skipif(IS_LOCAL, ...)</code>
+      guard and a corresponding integration test covering the real-engine path.
+      See <code>docs/emulator-gaps.md</code> for the full inventory and workarounds.
+    </p>
+    <div class="note">
+      <span class="note-icon">💡</span>
+      <div>
+        <strong>PR template enforces awareness:</strong> The
+        <code>.github/pull_request_template.md</code> checklist requires authors to
+        confirm they ran <code>make test-live</code> when touching emulator-gap areas
+        or ingestion code.
+      </div>
+    </div>
+  </div>
+
   <!-- Footer -->
   <footer class="page-footer">
     <a id="btn-prev" class="nav-btn" href="01-setup.html">

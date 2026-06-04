@@ -118,8 +118,8 @@
 
       <!-- Arrow labels -->
       <text class="lbl-1" x="258" y="100" text-anchor="middle" fill="#58A6FF" font-size="10">git push</text>
-      <text class="lbl-2" x="510" y="100" text-anchor="middle" fill="#58A6FF" font-size="10">GIT REPOSITORY</text>
-      <text class="lbl-2" x="510" y="113" text-anchor="middle" fill="#58A6FF" font-size="10">FETCH + deploy</text>
+      <text class="lbl-2" x="510" y="100" text-anchor="middle" fill="#58A6FF" font-size="10">OIDC CI</text>
+      <text class="lbl-2" x="510" y="113" text-anchor="middle" fill="#58A6FF" font-size="10">snow streamlit deploy</text>
 
       <!-- Port labels below diagram -->
       <text class="lbl-3" x="117" y="182" text-anchor="middle" fill="#3FB950" font-size="10">✓ Unit + Integration tests</text>
@@ -182,19 +182,46 @@
       <code>Session</code> locally.
     </p>
 
-    <h3>git-connected deploy</h3>
+    <h3>Secretless pipeline (OIDC)</h3>
     <p>
-      Snowflake clones your GitHub repo via a
-      <strong>GIT REPOSITORY</strong> object and an API integration with
-      a stored PAT secret. The Streamlit app is deployed directly from
-      the cloned branch — no file uploads, no manual sync.
+      CI/CD authenticates to Snowflake with <strong>short-lived OIDC tokens</strong>
+      via Workload Identity Federation — no passwords, private keys, or PAT secrets
+      stored anywhere. Git auth uses the <strong>GitHub App OAuth2</strong> flow (one-click
+      per user, Snowflake manages token rotation). The result: zero stored secrets in
+      the entire pipeline.
+    </p>
+    <p>
+      <em>Why?</em> Long-lived secrets are a liability in public repos. OIDC tokens
+      expire in ~5 minutes and are scoped to this specific repository + environment.
+      Even if somehow captured, they're useless after expiry.
+    </p>
+
+    <h3>Versioned releases + instant rollback</h3>
+    <p>
+      Pushing a <code>vX.Y.Z</code> git tag commits a named, immutable Streamlit
+      version. Rollback is a single SQL statement (<code>ALTER STREAMLIT ... SET
+      DEFAULT_VERSION</code>) — seconds, no redeploy required. Main-branch deploys
+      ride the mutable LIVE version; tags immortalise stable releases.
+    </p>
+
+    <h3>Three deploy mechanisms</h3>
+    <p>
+      <strong>A. snow CLI push</strong> (CI/CD) — uploads code + creates objects behind a quality gate.<br>
+      <strong>B. GIT REPOSITORY pull</strong> — Snowflake fetches from GitHub, zero CI required.<br>
+      <strong>C. Workspaces</strong> — browser-based dev with private preview before publish.<br>
+      All three are supported; the pipeline uses A for prod, devs choose B or C for iteration.
     </p>
 
     <h3>Three-tier dev loop</h3>
     <p>
-      <span class="badge badge-blue">Tier 1</span> Unit tests — no Snowflake, zero credentials, runs in milliseconds.<br>
-      <span class="badge badge-yellow">Tier 2</span> GitHub Actions CI — unit tests + ruff on every push.<br>
-      <span class="badge badge-green">Tier 3</span> Integration tests — real Snowflake, isolated temp schema, run locally.
+      <span class="badge badge-blue">Tier 1</span> Unit tests — no Snowflake, zero credentials, ~3s (Snowpark local emulator + AppTest).<br>
+      <span class="badge badge-yellow">Tier 2</span> GitHub Actions CI — unit + lint + architecture guard + integration tests (OIDC).<br>
+      <span class="badge badge-green">Tier 3</span> Integration tests — real Snowflake, isolated temp schema, parallel (pytest-xdist).
+    </p>
+    <p>
+      <em>Why this split?</em> Tier 1 gives sub-second feedback during TDD. Tier 2 catches
+      environment-specific issues without blocking your flow. Tier 3 validates against the
+      real engine before prod deploy.
     </p>
   </div>
 
@@ -202,8 +229,9 @@
     <span class="note-icon">💡</span>
     <div>
       <strong>Prerequisites:</strong> Python 3.11+, <a href="https://docs.astral.sh/uv/">uv</a>,
-      <a href="https://docs.snowflake.com/en/developer-guide/snowflake-cli/index">snow CLI</a>,
+      <a href="https://docs.snowflake.com/en/developer-guide/snowflake-cli/index">snow CLI 3.14+</a>,
       a Snowflake account (SYSADMIN + ACCOUNTADMIN access), and a GitHub account.
+      No stored secrets needed — CI uses OIDC; git uses OAuth2.
     </div>
   </div>
 

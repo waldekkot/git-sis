@@ -59,7 +59,7 @@
 <main>
   <div class="hero">
     <h1>Deploy to <span class="highlight">Streamlit-in-Snowflake</span></h1>
-    <p class="page-subtitle">Create the git-connected Streamlit app on container runtime. Three SQL statements, one shell command, zero file uploads.</p>
+    <p class="page-subtitle">Three ways to deploy — push, pull, or workspace. Understand when to use each, then create your first versioned release.</p>
   </div>
 
   <!-- Deploy loop SVG -->
@@ -124,6 +124,40 @@
   <h2 class="reveal">Deploy: workspace-native approach</h2>
 
   <div class="reveal">
+    <div class="note">
+      <span class="note-icon">💡</span>
+      <div>
+        <strong>Three deploy mechanisms — when to use each:</strong>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;margin:.8rem 0">
+          <thead>
+            <tr style="border-bottom:1px solid #30363D">
+              <th style="text-align:left;padding:.3rem .4rem;color:#8B949E">Mechanism</th>
+              <th style="text-align:left;padding:.3rem .4rem;color:#8B949E">Best for</th>
+              <th style="text-align:left;padding:.3rem .4rem;color:#8B949E">Command</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid #21262D">
+              <td style="padding:.3rem .4rem;color:#29B5E8;font-weight:600">A. snow CLI push</td>
+              <td style="padding:.3rem .4rem;color:#8B949E">CI/CD + multi-object deploys (tables, RBAC)</td>
+              <td style="padding:.3rem .4rem;font-family:monospace;color:#E6EDF3">make deploy</td>
+            </tr>
+            <tr style="border-bottom:1px solid #21262D">
+              <td style="padding:.3rem .4rem;color:#3FB950;font-weight:600">B. GIT REPOSITORY pull</td>
+              <td style="padding:.3rem .4rem;color:#8B949E">Rapid iteration from Snowsight (no CI)</td>
+              <td style="padding:.3rem .4rem;font-family:monospace;color:#E6EDF3">make deploy-git</td>
+            </tr>
+            <tr>
+              <td style="padding:.3rem .4rem;color:#D2A8FF;font-weight:600">C. Workspaces</td>
+              <td style="padding:.3rem .4rem;color:#8B949E">Interactive dev, pairing, non-CLI users</td>
+              <td style="padding:.3rem .4rem;font-family:monospace;color:#E6EDF3">Snowsight → Deploy button</td>
+            </tr>
+          </tbody>
+        </table>
+        <em>This repo supports all three.</em> The CI pipeline uses A (push); developers
+        choose B or C for inner-loop iteration.
+      </div>
+    </div>
     <h3>Option A — CLI (scripts/30_deploy.sh)</h3>
     <p>
       <code>snow streamlit deploy</code> reads <code>app/snowflake.yml</code> for the compute pool,
@@ -160,19 +194,21 @@ snow streamlit deploy -c oregon-sedemo -p app/ --replace</pre>
     <p>
       The <code>snowflake.yml</code> in the <code>app/</code> directory declares all deployment
       settings. Both the workspace Deploy button and <code>snow streamlit deploy</code> read it.
+      <strong>Environment overrides</strong> via <code>ctx.env</code> let the same file deploy
+      to dev, PR previews, and production — no config drift across branches.
     </p>
     <div class="code-block">
-      <div class="code-block-header"><span>app/snowflake.yml</span><button class="copy-btn">Copy</button></div>
+      <div class="code-block-header"><span>app/snowflake.yml (parameterised)</span><button class="copy-btn">Copy</button></div>
       <pre>definition_version: 2
 entities:
   ingest_console:
     type: streamlit
     identifier:
-      name: INGEST_CONSOLE
-      schema: GIT_SIS
-      database: SNOWFLAKE_LEARNING_DB
+      name: &lt;% ctx.env.GIT_SIS_APP_NAME | default('INGEST_CONSOLE') %&gt;
+      schema: &lt;% ctx.env.GIT_SIS_SCHEMA | default('GIT_SIS') %&gt;
+      database: &lt;% ctx.env.GIT_SIS_DATABASE | default('SNOWFLAKE_LEARNING_DB') %&gt;
     title: "Ingestion Ops Console"
-    query_warehouse: COMPUTE_WH
+    query_warehouse: &lt;% ctx.env.GIT_SIS_WAREHOUSE | default('COMPUTE_WH') %&gt;
     compute_pool: SYSTEM_COMPUTE_POOL_CPU
     runtime_name: SYSTEM$ST_CONTAINER_RUNTIME_PY3_11
     main_file: streamlit_app.py
@@ -181,12 +217,23 @@ entities:
     artifacts:
       - streamlit_app.py
       - pyproject.toml
-      - lib/config.py
-      - lib/ingest.py
-      - lib/session.py
+      - .streamlit/config.toml
       - pages/1_run_history.py
       - pages/2_error_explorer.py
-      - .streamlit/config.toml</pre>
+      - lib/__init__.py
+      - lib/config.py
+      - lib/ingest.py
+      - lib/session.py</pre>
+    </div>
+    <div class="note">
+      <span class="note-icon">💡</span>
+      <div>
+        <strong>Why <code>ctx.env</code> parameterisation?</strong><br>
+        One artifact deploys everywhere: <code>make deploy</code> (prod),
+        <code>GIT_SIS_SCHEMA=GIT_SIS_PR_42 make deploy</code> (PR preview),
+        <code>make deploy CONN=prod-conn GIT_SIS_DATABASE=PROD_DB</code> (production).
+        No config-by-branch drift, no copy-paste errors.
+      </div>
     </div>
   </div>
 
@@ -222,6 +269,38 @@ snow streamlit get-url -c oregon-sedemo \
     </div>
   </div>
 
+  <h2 class="reveal">Versioned releases + rollback</h2>
+
+  <div class="reveal">
+    <p>
+      Main-branch deploys ride the mutable <strong>LIVE</strong> version. When you're ready
+      to immortalise a stable release, push a semver tag:
+    </p>
+    <div class="code-block">
+      <div class="code-block-header"><span>bash — cut a versioned release</span><button class="copy-btn">Copy</button></div>
+      <pre>git tag v1.0.0
+git push origin v1.0.0
+# → release.yml: deploys + COMMIT VERSION V1_0_0 (sanitized)</pre>
+    </div>
+    <p>
+      <strong>Rollback</strong> is instant (no redeploy):
+    </p>
+    <div class="code-block">
+      <div class="code-block-header"><span>SQL — instant rollback to a prior version</span><button class="copy-btn">Copy</button></div>
+      <pre>ALTER STREAMLIT SNOWFLAKE_LEARNING_DB.GIT_SIS.INGEST_CONSOLE
+  SET DEFAULT_VERSION = V0_9_0;  -- prior good version from SHOW VERSIONS</pre>
+    </div>
+    <div class="note">
+      <span class="note-icon">💡</span>
+      <div>
+        <strong>Why semver tags?</strong> They're immutable git references (unlike branches)
+        and map cleanly to Snowflake version aliases. <code>v1.2.3</code> → <code>V1_2_3</code>
+        (dots/dashes become underscores — required by Snowflake identifier rules).
+        See <code>docs/runbook.md</code> for the full release/rollback procedure.
+      </div>
+    </div>
+  </div>
+
   <h2 class="reveal">Teardown (cleanup)</h2>
 
   <div class="reveal">
@@ -232,13 +311,12 @@ snow streamlit get-url -c oregon-sedemo \
         <div class="card-icon">🔄</div>
         <h4>90_cleanup.sh — reset demo</h4>
         <p>Drops GIT_SIS schema, STREAMLIT, GIT REPOSITORY, and API integration.
-           <strong>Keeps</strong> <code>GIT_SIS_INFRA.SECRETS.GITHUB_PAT</code>.
-           Rebuild with <code>10_setup.sh &amp;&amp; 30_deploy.sh</code> — no PAT re-entry.</p>
+           Rebuild with <code>10_setup.sh &amp;&amp; 30_deploy.sh</code>.</p>
       </div>
       <div class="card">
         <div class="card-icon">☢️</div>
         <h4>99_cleanup-infra.sh — full teardown</h4>
-        <p>Also drops <code>GIT_SIS_INFRA</code> database and the PAT secret.
+        <p>Drops everything.
            Prompts for confirmation. Use <code>--yes</code> to skip.
            Only for complete decommissioning.</p>
       </div>

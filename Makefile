@@ -8,7 +8,7 @@ CONN ?= oregon-sedemo
 SNOWFLAKE_DEFAULT_CONNECTION_NAME ?= $(CONN)
 export SNOWFLAKE_DEFAULT_CONNECTION_NAME
 
-.PHONY: install test test-watch test-full test-integration test-live \
+.PHONY: install test test-watch test-full test-integration test-live test-xdist \
         dev deploy verify clean lint help
 
 # -- Dependencies --------------------------------------------------------------
@@ -18,20 +18,25 @@ install:  ## Install deps + pre-commit hooks (one-time setup)
 
 # -- Testing -------------------------------------------------------------------
 
-test:  ## Fast unit tests (Snowpark local emulator + AppTest, ~2s) — TDD inner loop
+test:  ## Unit tests — module-scoped sessions (~2s) — TDD inner loop
 	uv run pytest tests/unit/ -v --tb=short
 
 test-watch:  ## Watch unit tests on file change (requires pytest-watch: uv add --dev pytest-watch)
-	uv run ptw tests/unit/ -- -x --tb=short
+	uv run ptw tests/unit/ -- -x --tb=short --no-cov
+
+test-xdist:  ## Parallel unit tests via xdist (use when suite grows past ~150 tests)
+	# --dist=loadfile keeps module-scoped fixtures on the same worker.
+	# At 46 tests xdist overhead exceeds the gain; re-evaluate around 150+ tests.
+	uv run pytest tests/unit/ -v --tb=short -n auto --dist=loadfile
 
 test-full:  ## Unit + integration tests against real Snowflake (~60s, needs credentials)
 	uv run pytest tests/ -v --tb=short
 
-test-integration:  ## Integration tests only (real Snowflake, temp schema, ~60s)
-	uv run pytest tests/integration/ -v --tb=short
+test-integration:  ## Integration tests — parallel via xdist, ~12s (was ~60s serial)
+	uv run pytest tests/integration/ -v --tb=short --no-cov -n auto
 
-test-live:  ## Cross-validate unit tests against real Snowflake (use before merging)
-	uv run pytest tests/unit/ -v --snowflake-session=live
+test-live:  ## Cross-validate unit tests against real Snowflake — parallel, ~80s (was ~220s)
+	uv run pytest tests/unit/ -v --tb=short --no-cov --snowflake-session=live -n auto --dist=loadfile
 
 # -- Local development ---------------------------------------------------------
 

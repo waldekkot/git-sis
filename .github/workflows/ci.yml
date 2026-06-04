@@ -8,6 +8,7 @@ on:
 jobs:
   unit-tests:
     name: Unit tests + lint (no Snowflake)
+    # Runs on every push and every PR — no credentials required.
     runs-on: ubuntu-latest
 
     steps:
@@ -16,6 +17,8 @@ jobs:
       - uses: astral-sh/setup-uv@v4
         with:
           version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
       - name: Install dependencies
         run: uv sync
@@ -26,11 +29,13 @@ jobs:
       - name: Run ruff lint
         run: uv run ruff check app/
 
-  deploy-to-sis:
-    name: Deploy to SiS (main only)
+  integration-tests:
+    name: Integration tests (real Snowflake)
+    # Runs after unit tests pass, on push to main only.
+    # Uses the same CI connection as deploy-to-sis; creates and drops a
+    # disposable GIT_SIS_TEST_<uuid> schema — never touches production data.
     runs-on: ubuntu-latest
     needs: unit-tests
-    # Only redeploy on direct push to main, not on PRs
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
@@ -39,6 +44,48 @@ jobs:
       - uses: astral-sh/setup-uv@v4
         with:
           version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Configure Snowflake CI connection
+        run: |
+          echo "$SF_PAT_TOKEN" > /tmp/sf_token.txt
+          mkdir -p ~/.snowflake
+          printf '[connections.ci]\naccount = "sfseeurope-wkot_demo1"\nuser = "wkot"\nauthenticator = "PROGRAMMATIC_ACCESS_TOKEN"\ntoken_file_path = "/tmp/sf_token.txt"\n' \
+            > ~/.snowflake/config.toml
+          chmod 0600 ~/.snowflake/config.toml
+        env:
+          SF_PAT_TOKEN: ${{ secrets.SF_PAT_TOKEN }}
+
+      - name: Run integration tests
+        # Each test gets its own GIT_SIS_TEST_<uuid> schema (function-scoped fixture).
+        # -n 5: 5 concurrent workers → schemas created/dropped in parallel.
+        # --no-cov: integration tests cover only lib/ingest.py; full coverage
+        #           is measured by the unit-tests job.
+        run: uv run pytest tests/integration/ -v --tb=short --no-cov -n 5
+        env:
+          SNOWFLAKE_DEFAULT_CONNECTION_NAME: ci
+
+  deploy-to-sis:
+    name: Deploy to SiS (main only)
+    # Deploys only after BOTH unit tests and integration tests pass.
+    # Unit tests validate logic against the Snowpark emulator;
+    # integration tests validate against the real Snowflake engine.
+    runs-on: ubuntu-latest
+    needs: integration-tests
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
       - name: Install snow CLI
         run: uv tool install snowflake-cli

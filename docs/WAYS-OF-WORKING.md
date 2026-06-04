@@ -146,6 +146,20 @@ What it does:
 Version alias format: `<BRANCH>_<SHORT_SHA>` (e.g. `MAIN_A1B2C3D`).
 Rollback: `ALTER STREAMLIT SET DEFAULT_VERSION = <prior_alias>` (see `docs/runbook.md`).
 
+### 3.2 Infrastructure as Code boundary
+
+| Snowflake object type | Tool | Location |
+|---|---|---|
+| Tables, views, schemas | **DCM** (`snow dcm plan/deploy`) | `dcm/definitions/` |
+| Database | **Terraform** | `terraform/database.tf` |
+| Warehouse | **Terraform** | `terraform/warehouse.tf` |
+| API integration (GitHub App) | **Terraform** | `terraform/api_integration.tf` |
+| Compute pool | Terraform (add to `terraform/` when needed) | — |
+| Roles, grants for CI SERVICE users | Manual (or extend Terraform) | `docs/oidc-setup.md` |
+| App code | Git + `snow streamlit deploy` or pull-based | `app/`, `.github/workflows/` |
+
+See `terraform/README.md` for setup, authentication, and state backend instructions.
+
 ---
 
 ## 4. Inner-loop improvements (developer velocity)

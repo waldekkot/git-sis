@@ -20,6 +20,13 @@ token/
 # direnv (local env overrides — copy from .envrc.example)
 .envrc
 
+# Terraform (state files may contain secrets; use remote backend)
+terraform/terraform.tfvars
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/.terraform.lock.hcl
+
 # CoCo / IDE artifacts
 .snowflake/
 .coverage

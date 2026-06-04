@@ -1,0 +1,16 @@
+# terraform.tfvars.example — copy to terraform.tfvars and fill in your values
+#
+#   cp terraform.tfvars.example terraform.tfvars
+#   # Edit terraform.tfvars (it is gitignored)
+#   terraform init
+#   terraform plan
+#   terraform apply
+
+snowflake_account = "YOUR_ACCOUNT_IDENTIFIER"  # e.g. sfseeurope-wkot_demo1
+snowflake_role    = "SYSADMIN"
+environment       = "dev"
+database_name     = "SNOWFLAKE_LEARNING_DB"
+warehouse_name    = "COMPUTE_WH"
+warehouse_size    = "X-Small"
+github_repo_url   = "https://github.com/YOUR_ORG/YOUR_REPO"
+github_api_prefix = "https://github.com/YOUR_ORG"

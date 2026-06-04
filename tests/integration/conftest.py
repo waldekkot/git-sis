@@ -13,6 +13,10 @@ GIT_SIS_TEST_<uuid> schema.  Combined with pytest-xdist (-n auto), all 10
 tests run in parallel across separate worker processes, each with its own
 Snowflake session.  Schemas never collide; no shared mutable state.
 
+seeded_schema is session-scoped: one shared schema with pre-inserted rows
+for tests that need existing data to assert against (e.g. get_run_history,
+get_kpis). Cheaper than repeating inserts per test.
+
 Expected wall time:
     Serial (-n 1):  ~60 s
     Parallel (-n 5): ~12 s  (limited by Snowflake DDL round-trip, not CPU)
@@ -23,11 +27,21 @@ from __future__ import annotations
 import importlib
 import os
 import uuid
+from datetime import UTC
 
 import pytest
 from snowflake.snowpark import Session
 
 _CONN = os.getenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME")
+
+# Known seed rows for seeded_schema (used in assertions)
+SEED_RUNS = [
+    {"run_id": "seed-run-001", "status": "SUCCESS", "rows_loaded": 500},
+    {"run_id": "seed-run-002", "status": "SUCCESS", "rows_loaded": 250},
+    {"run_id": "seed-run-003", "status": "FAILED", "rows_loaded": 0},
+    {"run_id": "seed-run-004", "status": "SUCCESS", "rows_loaded": 100},
+    {"run_id": "seed-run-005", "status": "SUCCESS", "rows_loaded": 750},
+]
 
 
 @pytest.fixture(scope="session")
@@ -47,19 +61,8 @@ def sf_session():
     sess.close()
 
 
-@pytest.fixture()
-def test_schema(sf_session) -> str:
-    """Disposable schema per test — created before the test, dropped after.
-
-    Function-scoped so that:
-    - each test starts with empty, isolated tables (no cross-test state bleed)
-    - xdist workers can run tests in parallel without schema collisions
-
-    The schema FQN is pushed into GIT_SIS_SCHEMA so lib.config picks it up
-    at import time (and via _reload_config autouse below).
-    """
-    schema_fqn = f"SNOWFLAKE_LEARNING_DB.GIT_SIS_TEST_{uuid.uuid4().hex[:8].upper()}"
-
+def _create_schema_with_tables(sf_session: Session, schema_fqn: str) -> None:
+    """Create schema + tables (factored out to avoid duplication)."""
     sf_session.sql(f"CREATE SCHEMA IF NOT EXISTS {schema_fqn}").collect()
     sf_session.sql(
         f"""
@@ -88,6 +91,20 @@ def test_schema(sf_session) -> str:
         """
     ).collect()
 
+
+@pytest.fixture()
+def test_schema(sf_session) -> str:
+    """Disposable schema per test — created before the test, dropped after.
+
+    Function-scoped so that:
+    - each test starts with empty, isolated tables (no cross-test state bleed)
+    - xdist workers can run tests in parallel without schema collisions
+
+    The schema FQN is pushed into GIT_SIS_SCHEMA so lib.config picks it up
+    at import time (and via _reload_config autouse below).
+    """
+    schema_fqn = f"SNOWFLAKE_LEARNING_DB.GIT_SIS_TEST_{uuid.uuid4().hex[:8].upper()}"
+    _create_schema_with_tables(sf_session, schema_fqn)
     os.environ["GIT_SIS_SCHEMA"] = schema_fqn
 
     import lib.config as cfg
@@ -98,3 +115,56 @@ def test_schema(sf_session) -> str:
 
     sf_session.sql(f"DROP SCHEMA IF EXISTS {schema_fqn} CASCADE").collect()
     del os.environ["GIT_SIS_SCHEMA"]
+
+
+@pytest.fixture(scope="session")
+def seeded_schema(sf_session) -> str:
+    """Session-scoped schema with a known set of rows for read-only assertions.
+
+    Use this for tests that read data (get_run_history, get_kpis, etc.) and
+    need rows to exist but do NOT need to write. All tests sharing this fixture
+    see the same rows — do NOT write to this schema from a test.
+
+    The seed rows mirror SEED_RUNS defined at module level for use in assertions:
+        from tests.integration.conftest import SEED_RUNS
+        assert len(df) == len(SEED_RUNS)
+
+    Schema is dropped at session end.
+    """
+    schema_fqn = f"SNOWFLAKE_LEARNING_DB.GIT_SIS_SEED_{uuid.uuid4().hex[:8].upper()}"
+    _create_schema_with_tables(sf_session, schema_fqn)
+
+    # Insert known seed rows into INGEST_LOG
+    from datetime import datetime
+
+    now = datetime.now(tz=UTC)
+    log_rows = [
+        (
+            r["run_id"],
+            "ingest_orders",
+            r["status"],
+            r["rows_loaded"],
+            None if r["status"] == "SUCCESS" else "E001",
+            None if r["status"] == "SUCCESS" else "Simulated failure (seeded)",
+            now,
+            now,
+        )
+        for r in SEED_RUNS
+    ]
+    sf_session.create_dataframe(
+        log_rows,
+        schema=[
+            "RUN_ID",
+            "PROC_NAME",
+            "STATUS",
+            "ROWS_LOADED",
+            "ERROR_CODE",
+            "ERROR_MSG",
+            "STARTED_AT",
+            "ENDED_AT",
+        ],
+    ).write.save_as_table(f"{schema_fqn}.INGEST_LOG", mode="append")
+
+    yield schema_fqn
+
+    sf_session.sql(f"DROP SCHEMA IF EXISTS {schema_fqn} CASCADE").collect()

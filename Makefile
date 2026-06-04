@@ -102,6 +102,15 @@ setup:  ## Create infra DB + GIT_SIS schema + tables
 setup-git:  ## Setup + git wiring for Snowsight workspace git-sync and deploy-git / deploy-sql
 	scripts/10_setup.sh -c $(CONN) --with-git
 
+seed:  ## Insert sample data into dev schema for local development (idempotent)
+	@# Requires: make setup (schema + tables must exist first)
+	@echo "  Seeding sample data into $(GIT_SIS_DATABASE).$(GIT_SIS_SCHEMA) ..."
+	snow sql -c $(CONN) \
+	    -D "GIT_SIS_DATABASE=$(GIT_SIS_DATABASE)" \
+	    -D "GIT_SIS_SCHEMA=$(GIT_SIS_SCHEMA)" \
+	    -f deploy/seed_data.sql
+	@echo "  [ok] Seed data inserted. Run: make dev"
+
 # -- Deploy --------------------------------------------------------------------
 
 deploy:  ## Deploy to SiS via snow streamlit deploy (push-based, workspace-native)

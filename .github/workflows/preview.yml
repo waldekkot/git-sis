@@ -27,16 +27,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  unit-tests:
-    # Delegates to reusable workflow — single source of truth for unit test steps.
+  unit-tests-311:
     uses: ./.github/workflows/reusable-unit-tests.yml
     with:
       python-version: "3.11"
 
+  unit-tests-312:
+    uses: ./.github/workflows/reusable-unit-tests.yml
+    with:
+      python-version: "3.12"
+
   preview-deploy:
     name: Deploy PR preview
     runs-on: ubuntu-latest
-    needs: unit-tests
+    needs: [unit-tests-311, unit-tests-312]
     # Only on non-fork PRs — forks don't have OIDC id-token access to our account.
     if: github.event.pull_request.head.repo.full_name == github.repository
     environment: preview   # keep WITHOUT required reviewers (no approval on previews)

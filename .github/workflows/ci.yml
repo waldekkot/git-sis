@@ -13,9 +13,9 @@
 #   deploy-to-sis      -> environment: prod  (REQUIRED REVIEWERS — set in Settings)
 #
 # Job graph (push to main):
-#   unit-tests ──► integration-tests ──► deploy-to-sis (awaits prod approval)
+#   unit-tests (3.11 + 3.12) ──► integration-tests ──► deploy-to-sis (awaits prod approval)
 # Job graph (pull_request):
-#   unit-tests only (no Snowflake credentials required)
+#   unit-tests (3.11 + 3.12) only (no Snowflake credentials required)
 
 name: CI
 
@@ -32,17 +32,22 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  unit-tests:
-    # Delegates to reusable workflow — single source of truth for unit test steps.
-    # Also runs on pull_request (no Snowflake credentials required).
+  unit-tests-311:
+    # Run on 3.11 (SiS runtime) and 3.12 (forwards-compat signal).
+    # Both must pass before integration tests proceed.
     uses: ./.github/workflows/reusable-unit-tests.yml
     with:
       python-version: "3.11"
 
+  unit-tests-312:
+    uses: ./.github/workflows/reusable-unit-tests.yml
+    with:
+      python-version: "3.12"
+
   integration-tests:
     name: Integration tests (real Snowflake, OIDC)
     runs-on: ubuntu-latest
-    needs: unit-tests
+    needs: [unit-tests-311, unit-tests-312]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: ci
     permissions:

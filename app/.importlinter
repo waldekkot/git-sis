@@ -1,0 +1,24 @@
+# import-linter contract — architectural guardrail for the SiS app.
+#
+# Enforces the layering rule from docs/WAYS-OF-WORKING.md §1.2 / §4.5:
+#   business logic (lib.ingest, lib.config) must remain Streamlit-free so it
+#   stays unit-testable against the Snowpark local-testing emulator with zero
+#   Streamlit runtime.
+#
+# `lib.session` is intentionally EXEMPT — the session seam (§1.1) is the one
+# place allowed to import streamlit (for @st.cache_resource).
+#
+# Run from the app/ directory (so `lib` resolves to app/lib):
+#   cd app && uv run lint-imports        # or: make arch
+[importlinter]
+root_package = lib
+include_external_packages = True
+
+[importlinter:contract:logic-free-of-streamlit]
+name = Business logic must not import Streamlit
+type = forbidden
+source_modules =
+    lib.ingest
+    lib.config
+forbidden_modules =
+    streamlit

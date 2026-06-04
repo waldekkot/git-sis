@@ -116,10 +116,15 @@ success "Deployed: $APP_FQN"
 # Gives you a stable fallback version separate from the mutable live version.
 # Safe on older accounts: commits the live state under the given alias name.
 if [[ -n "$COMMIT_ALIAS" ]]; then
-    info "Committing live version as '$COMMIT_ALIAS' ..."
+    # Sanitize to a valid Snowflake identifier: a semver tag like 'v1.2.3'
+    # becomes 'V1_2_3' (dots/dashes -> underscore, uppercased). Version aliases
+    # cannot contain '.' or '-'.
+    VERSION_ALIAS="$(printf '%s' "$COMMIT_ALIAS" | tr '.-' '__' | tr '[:lower:]' '[:upper:]')"
+    info "Committing live version as '$VERSION_ALIAS' (from tag '$COMMIT_ALIAS') ..."
     if snow sql -c "$CONN" -q \
-        "ALTER STREAMLIT ${APP_FQN} COMMIT VERSION ${COMMIT_ALIAS};" 2>/dev/null; then
-        success "Version '$COMMIT_ALIAS' committed. Use ALTER STREAMLIT ... SET DEFAULT_VERSION to pin it."
+        "ALTER STREAMLIT ${APP_FQN} COMMIT VERSION ${VERSION_ALIAS};" 2>/dev/null; then
+        success "Version '$VERSION_ALIAS' committed. Roll back with:"
+        success "  ALTER STREAMLIT ${APP_FQN} SET DEFAULT_VERSION = ${VERSION_ALIAS};"
     else
         warn "--commit skipped: ALTER STREAMLIT COMMIT requires the 2025_01 BCR bundle."
         warn "Enable at: https://docs.snowflake.com/en/release-notes/bcr-bundles/2025_01/bcr-1888"

@@ -29,7 +29,7 @@ COMMIT ?=
 .PHONY: init install test test-watch test-watch-install test-xdist \
         test-full test-integration test-live \
         dev dev-port setup setup-git deploy deploy-git deploy-sql \
-        verify open clean clean-all lint fmt typecheck hooks help
+        verify open clean clean-all lint fmt typecheck arch hooks help
 
 # -- First-time setup ----------------------------------------------------------
 
@@ -147,6 +147,10 @@ fmt:  ## Auto-format with ruff
 
 typecheck:  ## Type-check app/lib/ with ty
 	uv run ty check app/lib/
+
+arch:  ## Enforce layering: lib.ingest/config must not import streamlit (import-linter)
+	# Run from app/ so `lib` resolves to app/lib; --project .. uses the root dev venv.
+	cd app && uv run --project .. lint-imports
 
 hooks:  ## Run all pre-commit hooks against every file
 	uvx pre-commit run --all-files

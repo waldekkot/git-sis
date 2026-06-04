@@ -1,17 +1,22 @@
-name: Setup Snowflake connection
+name: Setup Snowflake connection (OIDC)
 description: |
-  Writes a named CI connection to ~/.snowflake/config.toml using a
-  Programmatic Access Token (PAT) from GitHub Secrets.
+  Writes a named CI connection to ~/.snowflake/config.toml for secretless,
+  Workload-Identity-Federation (OIDC) authentication.
 
-  OIDC upgrade path (secretless, recommended for production teams):
-    Replace this action with snowflakedb/snowflake-cli-action use-oidc: true
-    and create the Snowflake SECURITY INTEGRATION described in docs/oidc-setup.md.
-    The job then needs  permissions: { id-token: write }  and no SF_PAT_TOKEN secret.
+  Prerequisites (run once per environment — see docs/oidc-setup.md):
+    * A Snowflake SERVICE user with WORKLOAD_IDENTITY (TYPE = OIDC) whose SUBJECT
+      matches the calling job's GitHub OIDC subject.
+    * The calling job MUST run the snowflakedb/snowflake-cli-action step with
+      use-oidc: true AND oidc-token-name: SNOWFLAKE_CONNECTIONS_CI_TOKEN
+      BEFORE this action, and declare  permissions: { id-token: write }.
+
+  The snowflake-cli-action exports the short-lived token as
+  SNOWFLAKE_CONNECTIONS_CI_TOKEN plus the global SNOWFLAKE_AUTHENTICATOR /
+  SNOWFLAKE_WORKLOAD_IDENTITY_PROVIDER / SNOWFLAKE_AUDIENCE variables. This
+  action only writes the account + user for the named 'ci' connection; no
+  secret is ever stored.
 
 inputs:
-  sf-pat-token:
-    required: true
-    description: Snowflake Programmatic Access Token (from GitHub Secrets)
   sf-account:
     required: false
     default: "sfseeurope-wkot_demo1"
@@ -19,11 +24,10 @@ inputs:
       Snowflake account identifier (no .snowflakecomputing.com suffix).
       Override per-repo via a GitHub repository variable GIT_SIS_SF_ACCOUNT.
   sf-user:
-    required: false
-    default: "wkot"
+    required: true
     description: |
-      Snowflake user that owns the CI connection.
-      Override per-repo via a GitHub repository variable GIT_SIS_SF_USER.
+      Snowflake SERVICE user for this environment's OIDC subject.
+      e.g. CI_SVC_CI (env ci), CI_SVC_PREVIEW (env preview), CI_SVC_PROD (env prod).
   connection-name:
     required: false
     default: "ci"
@@ -32,17 +36,15 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Write Snowflake config.toml
+    - name: Write Snowflake config.toml (WORKLOAD_IDENTITY / OIDC)
       shell: bash
       env:
-        SF_PAT_TOKEN: ${{ inputs.sf-pat-token }}
         SF_ACCOUNT: ${{ inputs.sf-account }}
         SF_USER: ${{ inputs.sf-user }}
         CONN_NAME: ${{ inputs.connection-name }}
       run: |
-        echo "$SF_PAT_TOKEN" > /tmp/sf_token.txt
         mkdir -p ~/.snowflake
-        printf '[connections.%s]\naccount = "%s"\nuser = "%s"\nauthenticator = "PROGRAMMATIC_ACCESS_TOKEN"\ntoken_file_path = "/tmp/sf_token.txt"\n' \
+        printf '[connections.%s]\naccount = "%s"\nuser = "%s"\nauthenticator = "WORKLOAD_IDENTITY"\nworkload_identity_provider = "OIDC"\n' \
           "$CONN_NAME" "$SF_ACCOUNT" "$SF_USER" \
           > ~/.snowflake/config.toml
         chmod 0600 ~/.snowflake/config.toml

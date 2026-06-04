@@ -1,0 +1,57 @@
+# Versioned release — triggered by pushing a semver tag (vX.Y.Z).
+#
+# Policy (WAYS-OF-WORKING §5.1): main-branch deploys ride the mutable LIVE
+# version; a *stable, rollback-able* version is committed only when a vX.Y.Z tag
+# is pushed. The tag becomes the Streamlit version alias (sanitized: v1.2.3 ->
+# V1_2_3 inside 30_deploy.sh).
+#
+# Secretless via OIDC, gated through the 'prod' environment (same SERVICE user
+# and approval gate as the main deploy job in ci.yml).
+#
+# Rollback (see docs/runbook.md):
+#   ALTER STREAMLIT <db>.<schema>.<app> SET DEFAULT_VERSION = <PRIOR_ALIAS>;
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  release:
+    name: Deploy + commit version ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    environment: prod   # REQUIRED REVIEWERS gate (repo Settings -> Environments -> prod)
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - uses: snowflakedb/snowflake-cli-action@v2
+        with:
+          use-oidc: true
+          cli-version: "3.19"
+          oidc-token-name: SNOWFLAKE_CONNECTIONS_CI_TOKEN
+          default-config-file-path: ""
+
+      - uses: ./.github/actions/setup-snowflake
+        with:
+          sf-account: ${{ vars.GIT_SIS_SF_ACCOUNT || 'sfseeurope-wkot_demo1' }}
+          sf-user: ${{ vars.GIT_SIS_SF_USER_PROD || 'CI_SVC_PROD' }}
+
+      - name: Deploy and commit version alias
+        # --commit <tag> deploys then runs ALTER STREAMLIT ... COMMIT VERSION,
+        # tagging this release as a stable, rollback-able version.
+        run: scripts/30_deploy.sh -c ci --commit "${{ github.ref_name }}"
+
+      - name: Post-deploy smoke check
+        run: scripts/40_verify.sh -c ci

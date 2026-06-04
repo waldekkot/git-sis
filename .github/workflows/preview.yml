@@ -8,10 +8,11 @@
 # On PR close (see preview-cleanup.yml): the preview schema is dropped.
 #
 # Prerequisites:
-#   - SF_PAT_TOKEN GitHub Secret with CREATE SCHEMA + CREATE STREAMLIT
-#     in SNOWFLAKE_LEARNING_DB.
-#   - OIDC upgrade: replace setup-snowflake action with
-#     snowflake-cli-action use-oidc: true (see docs/oidc-setup.md).
+#   - OIDC SERVICE user CI_SVC_PREVIEW with WORKLOAD_IDENTITY whose SUBJECT is
+#     repo:<owner>/<repo>:environment:preview, granted CREATE SCHEMA + CREATE
+#     STREAMLIT in SNOWFLAKE_LEARNING_DB. See docs/oidc-setup.md.
+#   - A GitHub 'preview' environment WITHOUT required reviewers (so previews
+#     deploy without manual approval).
 
 name: PR Preview
 
@@ -39,8 +40,12 @@ jobs:
     name: Deploy PR preview
     runs-on: ubuntu-latest
     needs: unit-tests
-    # Only on non-fork PRs — forks don't have access to repository secrets.
+    # Only on non-fork PRs — forks don't have OIDC id-token access to our account.
     if: github.event.pull_request.head.repo.full_name == github.repository
+    environment: preview   # keep WITHOUT required reviewers (no approval on previews)
+    permissions:
+      id-token: write
+      contents: read
     env:
       PREVIEW_DB: SNOWFLAKE_LEARNING_DB
       PREVIEW_SCHEMA: GIT_SIS_PR_${{ github.event.number }}
@@ -60,12 +65,15 @@ jobs:
 
       - uses: snowflakedb/snowflake-cli-action@v2
         with:
+          use-oidc: true
           cli-version: "3.19"
+          oidc-token-name: SNOWFLAKE_CONNECTIONS_CI_TOKEN
           default-config-file-path: ""   # config written by setup-snowflake below
 
       - uses: ./.github/actions/setup-snowflake
         with:
-          sf-pat-token: ${{ secrets.SF_PAT_TOKEN }}
+          sf-account: ${{ vars.GIT_SIS_SF_ACCOUNT || 'sfseeurope-wkot_demo1' }}
+          sf-user: ${{ vars.GIT_SIS_SF_USER_PREVIEW || 'CI_SVC_PREVIEW' }}
 
       - name: Create preview schema
         run: |

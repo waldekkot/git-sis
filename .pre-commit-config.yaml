@@ -23,6 +23,13 @@ repos:
         types: [python]
         pass_filenames: false
 
+      - id: import-linter
+        name: import-linter (lib must not import streamlit)
+        entry: bash -c 'cd app && uv run --project .. lint-imports'
+        language: system
+        types: [python]
+        pass_filenames: false
+
       - id: pytest-unit
         name: pytest unit (no Snowflake)
         entry: uv run pytest tests/unit/ --tb=short -q

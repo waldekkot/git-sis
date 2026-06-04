@@ -283,21 +283,23 @@ Commits are blocked until all hooks pass. The ruff hook auto-fixes lint issues a
 
 ## CI/CD
 
-GitHub Actions runs on every push and pull request:
+GitHub Actions runs on every push and pull request. Auth is **secretless (OIDC /
+Workload Identity Federation)** — no `SF_PAT_TOKEN`. See `docs/oidc-setup.md`.
 
-| Job | Trigger | What it does |
-|-----|---------|--------------|
-| `unit-tests` | push + PR | ruff lint + 37 unit tests + 100% coverage check |
-| `deploy-to-sis` | push to `main` only | `snow streamlit deploy` after unit-tests pass |
+| Job | Trigger | Environment | What it does |
+|-----|---------|-------------|--------------|
+| `unit-tests` | push + PR | — | ruff + 46 unit tests + 100% coverage + import-linter (`arch`) |
+| `integration-tests` | push to `main` | `ci` | Snowpark integration tests in disposable schemas (OIDC) |
+| `deploy-to-sis` | push to `main` | `prod` (approval) | `snow streamlit deploy` + post-deploy smoke check |
+| `preview-deploy` | PR (non-fork) | `preview` | isolated `GIT_SIS_PR_<n>` app + URL comment |
+| `release` | push tag `vX.Y.Z` | `prod` (approval) | deploy + `COMMIT VERSION` (rollback-able) — see `docs/runbook.md` |
 
-The deploy job runs `scripts/30_deploy.sh -c ci` which executes
-`snow streamlit deploy -p app/ --replace` — workspace-native, no GIT REPOSITORY FETCH needed.
+### One-time setup (OIDC)
 
-### Setting up the `SF_PAT_TOKEN` secret (one-time)
-
-1. Read your Snowflake PAT token value (local token file for `oregon-sedemo`)
-2. **Settings → Secrets and variables → Actions → New repository secret**
-3. Name: `SF_PAT_TOKEN`, Value: the raw token string
+1. Run the SERVICE-user SQL in `docs/oidc-setup.md` (ACCOUNTADMIN).
+2. Create GitHub Environments `ci`, `preview`, `prod` (set **required reviewers** on
+   `prod` only).
+3. There is **no token to store** — remove any legacy `SF_PAT_TOKEN` secret.
 
 ## Cleanup
 

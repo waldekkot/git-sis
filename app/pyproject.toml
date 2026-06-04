@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "SiS container-runtime dependencies for the Ingestion Ops Console"
 requires-python = ">=3.11"
 dependencies = [
-    "snowflake-snowpark-python",
-    "streamlit",
+    # Pinned to prevent silent SiS runtime upgrades from breaking the app.
+    # Update these intentionally via: uv lock --upgrade-package <pkg>
+    # Then test locally and in CI before deploying.
+    "streamlit>=1.45,<2",
+    "snowflake-snowpark-python>=1.21,<2",
 ]

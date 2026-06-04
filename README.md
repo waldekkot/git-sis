@@ -1,5 +1,7 @@
 # git-sis: Streamlit-in-Snowflake ingestion console
 
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/waldekkot/git-sis)
+
 A local-first Streamlit + Snowpark **ingestion ops console**, deployed to
 Snowflake as a **Streamlit-in-Snowflake (SiS)** app on the **container runtime**,
 developed via **Snowsight Workspaces** and automated through GitHub Actions.

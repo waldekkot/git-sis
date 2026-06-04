@@ -1,0 +1,76 @@
+{
+  "name": "git-sis dev",
+
+  // Python 3.11 matches the SiS container runtime (SYSTEM$ST_CONTAINER_RUNTIME_PY3_11).
+  "image": "mcr.microsoft.com/devcontainers/python:3.11-bullseye",
+
+  "features": {
+    // GitHub CLI — used by make targets that call `gh`, and for PR workflows
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    // Common utils: git, curl, jq, etc.
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "configureZshAsDefault": true
+    }
+  },
+
+  // After container is created: install uv, sync deps, install pre-commit hooks.
+  // make install is the zero-Snowflake entry point — safe to run without creds.
+  "postCreateCommand": "pip install --quiet uv && make install",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "charliermarsh.ruff",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "tamasfe.even-better-toml",
+        "snowflake.snowflake-vsc",
+        "redhat.vscode-yaml",
+        "GitHub.vscode-github-actions"
+      ],
+      "settings": {
+        // Point VS Code at the uv-managed venv
+        "python.defaultInterpreterPath": "/workspaces/git-sis/.venv/bin/python",
+        "editor.formatOnSave": true,
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff"
+        },
+        // Ruff settings
+        "ruff.lint.enable": true,
+        "ruff.fixAll": true,
+        "ruff.organizeImports": true,
+        // Show test results inline
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestArgs": ["tests/unit/", "--no-cov"]
+      }
+    }
+  },
+
+  // Forward Streamlit default port so `make dev` opens in VS Code Simple Browser
+  "forwardPorts": [8501],
+  "portsAttributes": {
+    "8501": {
+      "label": "Streamlit app",
+      "onAutoForward": "openPreview"
+    }
+  },
+
+  // Inject Snowflake env vars from Codespaces secrets or local .envrc.
+  // Set these as Codespaces secrets: https://github.com/settings/codespaces
+  //   SNOWFLAKE_DEFAULT_CONNECTION_NAME  (required for Snowflake-touching targets)
+  //   GIT_SIS_DATABASE                  (optional, defaults to SNOWFLAKE_LEARNING_DB)
+  //   GIT_SIS_SCHEMA                    (optional, defaults to GIT_SIS)
+  //   GIT_SIS_APP_NAME                  (optional, defaults to INGEST_CONSOLE)
+  //   GIT_SIS_WAREHOUSE                 (optional, defaults to COMPUTE_WH)
+  //
+  // Note: `make test` (unit tests only) works WITHOUT any secrets.
+  // Only `make dev`, `make setup`, and `make deploy` require Snowflake access.
+  "remoteEnv": {
+    "SNOWFLAKE_DEFAULT_CONNECTION_NAME": "${localEnv:SNOWFLAKE_DEFAULT_CONNECTION_NAME:}",
+    "GIT_SIS_DATABASE": "${localEnv:GIT_SIS_DATABASE:SNOWFLAKE_LEARNING_DB}",
+    "GIT_SIS_SCHEMA": "${localEnv:GIT_SIS_SCHEMA:GIT_SIS}",
+    "GIT_SIS_APP_NAME": "${localEnv:GIT_SIS_APP_NAME:INGEST_CONSOLE}",
+    "GIT_SIS_WAREHOUSE": "${localEnv:GIT_SIS_WAREHOUSE:COMPUTE_WH}"
+  }
+}

@@ -1,0 +1,50 @@
+# config.toml.example — copy to ~/.snowflake/config.toml and fill in your values.
+#
+# OIDC (recommended for CI — secretless, no long-lived tokens stored in GitHub):
+#   Requires a one-time Snowflake SECURITY INTEGRATION setup.
+#   See docs/oidc-setup.md for the exact SQL and GitHub Actions configuration.
+#
+# PAT (Programmatic Access Token — quickest for local dev):
+#   snow token create --role SYSADMIN --warehouse COMPUTE_WH > ~/.sf_token.txt
+#   Then set token_file_path to that file (see [connections.dev] below).
+#
+# Key-pair (recommended for automation if OIDC is not available):
+#   openssl genrsa -out ~/.ssh/sf_rsa_key.pem 2048
+#   openssl rsa -in ~/.ssh/sf_rsa_key.pem -pubout -out ~/.ssh/sf_rsa_key.pub
+#   ALTER USER <user> SET RSA_PUBLIC_KEY='<contents of sf_rsa_key.pub>';
+#
+# Reference: https://docs.snowflake.com/en/developer-guide/snowflake-cli/connecting/specify-credentials
+
+default_connection_name = "dev"
+
+[connections.dev]
+# ── fill in your account and user ─────────────────────────────────────────
+account   = "YOUR_ACCOUNT_IDENTIFIER"   # e.g. "myorg-myaccount" (no .snowflakecomputing.com)
+user      = "YOUR_USERNAME"
+
+# ── choose one auth method (uncomment one block) ───────────────────────────
+
+# Option A — PAT (easiest for local dev):
+authenticator   = "PROGRAMMATIC_ACCESS_TOKEN"
+token_file_path = "~/.sf_token.txt"    # snow token create ... > this file
+
+# Option B — Key-pair:
+# authenticator    = "SNOWFLAKE_JWT"
+# private_key_file = "~/.ssh/sf_rsa_key.pem"
+
+# ── optional defaults (speeds up CLI commands) ─────────────────────────────
+database  = "SNOWFLAKE_LEARNING_DB"
+schema    = "GIT_SIS"
+warehouse = "COMPUTE_WH"
+role      = "SYSADMIN"
+
+# ── CI connection ──────────────────────────────────────────────────────────
+# This block is created in-band by .github/actions/setup-snowflake/action.yml.
+# You do NOT commit real credentials here — the action injects them at runtime
+# from GitHub Secrets.
+#
+# [connections.ci]
+# account          = "YOUR_ACCOUNT_IDENTIFIER"
+# user             = "ci_service_user"
+# authenticator    = "PROGRAMMATIC_ACCESS_TOKEN"  # switch to WORKLOAD_IDENTITY for OIDC
+# token_file_path  = "/tmp/sf_token.txt"

@@ -1,0 +1,48 @@
+name: Setup Snowflake connection
+description: |
+  Writes a named CI connection to ~/.snowflake/config.toml using a
+  Programmatic Access Token (PAT) from GitHub Secrets.
+
+  OIDC upgrade path (secretless, recommended for production teams):
+    Replace this action with snowflakedb/snowflake-cli-action use-oidc: true
+    and create the Snowflake SECURITY INTEGRATION described in docs/oidc-setup.md.
+    The job then needs  permissions: { id-token: write }  and no SF_PAT_TOKEN secret.
+
+inputs:
+  sf-pat-token:
+    required: true
+    description: Snowflake Programmatic Access Token (from GitHub Secrets)
+  sf-account:
+    required: false
+    default: "sfseeurope-wkot_demo1"
+    description: |
+      Snowflake account identifier (no .snowflakecomputing.com suffix).
+      Override per-repo via a GitHub repository variable GIT_SIS_SF_ACCOUNT.
+  sf-user:
+    required: false
+    default: "wkot"
+    description: |
+      Snowflake user that owns the CI connection.
+      Override per-repo via a GitHub repository variable GIT_SIS_SF_USER.
+  connection-name:
+    required: false
+    default: "ci"
+    description: Named connection created in config.toml (used as -c <name> in snow CLI calls)
+
+runs:
+  using: composite
+  steps:
+    - name: Write Snowflake config.toml
+      shell: bash
+      env:
+        SF_PAT_TOKEN: ${{ inputs.sf-pat-token }}
+        SF_ACCOUNT: ${{ inputs.sf-account }}
+        SF_USER: ${{ inputs.sf-user }}
+        CONN_NAME: ${{ inputs.connection-name }}
+      run: |
+        echo "$SF_PAT_TOKEN" > /tmp/sf_token.txt
+        mkdir -p ~/.snowflake
+        printf '[connections.%s]\naccount = "%s"\nuser = "%s"\nauthenticator = "PROGRAMMATIC_ACCESS_TOKEN"\ntoken_file_path = "/tmp/sf_token.txt"\n' \
+          "$CONN_NAME" "$SF_ACCOUNT" "$SF_USER" \
+          > ~/.snowflake/config.toml
+        chmod 0600 ~/.snowflake/config.toml

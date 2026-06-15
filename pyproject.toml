@@ -13,7 +13,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "snowflake-snowpark-python[localtest]>=1.21",
-    "ruff>=0.15",
+    "ruff>=0.15.17",
     "pytest>=8.3",
     "pytest-cov>=6.0",
     "pytest-watch>=4.2",

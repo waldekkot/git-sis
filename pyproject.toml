@@ -5,7 +5,7 @@ description = "Git-connected Streamlit-in-Snowflake ingestion ops console (Strea
 requires-python = ">=3.11"
 dependencies = [
     "streamlit>=1.45",
-    "snowflake-snowpark-python>=1.21",
+    "snowflake-snowpark-python>=1.52.0",
     "snowflake-connector-python>=3.13",
     "pandas>=2.2",
 ]
